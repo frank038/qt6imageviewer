@@ -5,6 +5,7 @@ Requirements:
 - python3
 - pyqt6
 - PIL for supporting more image formats (optional but recommended)
+- config file cfg_imageviewer.py for some application options
 
 Features:
 - animated images
