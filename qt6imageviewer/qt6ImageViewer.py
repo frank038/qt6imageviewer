@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.5
+# V. 0.6
 
 from PyQt6.QtCore import Qt, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -130,6 +130,7 @@ class QImageViewer(QMainWindow):
         self.WW = WW
         self.HH = HH
         self.resize(self.WW, self.HH)
+        self.pixel_ratio = self.devicePixelRatio()
         #
         self.ipath = ipath
         self.curr_dir = None
@@ -426,7 +427,7 @@ class QImageViewer(QMainWindow):
             self.updateActions()
             self.infoAct.setEnabled(True)
         # 
-        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor, 2)))
+        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
         #
         if self.is_animated:
             self.rotateLeftAct.setEnabled(False)
@@ -482,7 +483,8 @@ class QImageViewer(QMainWindow):
         self.scaleImage(0.8)
     
     def normalSize(self):
-        self.scaleImage(self.scaleFactorStart/self.scaleFactor)
+        # self.scaleImage(self.scaleFactorStart/self.scaleFactor)
+        self.scaleImage(1.0)
     
     def createActions(self):
         self.openAct = QAction("&Open...", self, shortcut="Ctrl+o", triggered=self.open)
@@ -562,7 +564,10 @@ class QImageViewer(QMainWindow):
         self.leftPanelAct.setEnabled(True)
     
     def scaleImage(self, factor):
-        self.scaleFactor *= factor
+        if factor == 1.0:
+            self.scaleFactor = 1.0/self.pixel_ratio
+        else:
+            self.scaleFactor *= factor
         if self.is_animated:
             ppixmap = self.ianimated.currentPixmap()
         else:
@@ -575,7 +580,7 @@ class QImageViewer(QMainWindow):
         self.zoomInAct.setEnabled(self.scaleFactor < 3.0)
         self.zoomOutAct.setEnabled(self.scaleFactor > 0.333)
         #
-        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor, 2)))
+        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
     
     
     #
