@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-# V. 0.6
+# V. 0.7
 
-from PyQt6.QtCore import Qt, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
-from PyQt6.QtGui import QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
+from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
+from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
-from PyQt6.QtWidgets import QAbstractItemView, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QFileDialog
+from PyQt6.QtWidgets import QColorDialog, QListView, QAbstractItemView, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QFileDialog
 import subprocess, os, time
 from cfg_imageviewer import *
 
@@ -187,6 +187,8 @@ class QImageViewer(QMainWindow):
         self.lat_scrollarea.setFixedWidth(ICON_SIZE+10)
         #
         self.lat_widget = QListWidget()
+        # self.lat_widget.setFixedWidth(ICON_SIZE+10)
+        # self.lat_widget.setViewMode(QListView.ViewMode.IconMode)
         self.lat_widget.setContentsMargins(0,0,0,0)
         self.lat_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.lat_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -222,6 +224,8 @@ class QImageViewer(QMainWindow):
         self.scrollarea_size = None
         self._is_shown = False
         self._is_resized = False
+        #
+        self._color_picker = False
         
     
     def showEvent(self, e):
@@ -502,7 +506,9 @@ class QImageViewer(QMainWindow):
         self.tool1Act = QAction("{}".format(TOOL1NAME or "Tool1"), self, shortcut="Ctrl+1", enabled=True, triggered=self.tool1)
         self.tool2Act = QAction("{}".format(TOOL2NAME or "Tool2"), self, shortcut="Ctrl+2", enabled=True, triggered=self.tool2)
         self.tool3Act = QAction("{}".format(TOOL3NAME or "Tool3"), self, shortcut="Ctrl+3", enabled=True, triggered=self.tool3)
-    
+        #
+        self.tool4Act = QAction("{}".format("Color picker"), self, shortcut="Ctrl+4", enabled=True, triggered=self.on_color_picker)
+        
     def createMenus(self):
         self.fileMenu = QMenu("&File", self)
         self.fileMenu.addAction(self.openAct)
@@ -526,6 +532,7 @@ class QImageViewer(QMainWindow):
         self.toolMenu.addAction(self.tool1Act)
         self.toolMenu.addAction(self.tool2Act)
         self.toolMenu.addAction(self.tool3Act)
+        self.toolMenu.addAction(self.tool4Act)
         #
         self.menuBar().addMenu(self.fileMenu)
         self.menuBar().addMenu(self.viewMenu)
@@ -554,7 +561,11 @@ class QImageViewer(QMainWindow):
             subprocess.Popen([os.path.join(main_dir, "tool3.sh"), self.ipath])
         except Exception as E:
             MyDialog("Error", str(E), self)
-
+    
+    def on_color_picker(self):
+        self._color_picker = True
+        QApplication.setOverrideCursor(Qt.CursorShape.CrossCursor)
+    
     def updateActions(self):
         self.zoomInAct.setEnabled(True)
         self.zoomOutAct.setEnabled(True)
@@ -697,6 +708,17 @@ class QImageViewer(QMainWindow):
             self.last_time_move_h = 0
             self.last_time_move_v = 0
             return True
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                if self._color_picker == True:
+                    _pix = self.grab(QRect(event.pos().x(),event.pos().y(),1,1))
+                    _img = _pix.toImage()
+                    _color_picked = _img.pixelColor(1,1).name(QColor.NameFormat.HexRgb)
+                    _clipboard = QGuiApplication.clipboard()
+                    _clipboard.setText(_color_picked)
+                    QApplication.restoreOverrideCursor()
+                    self._color_picker = False
+                    return True
         # key navigation
         elif event.type() == QEvent.Type.KeyPress:
             # next or previous file
@@ -709,6 +731,11 @@ class QImageViewer(QMainWindow):
                 self.imageRotate(-1)
             elif event.key() == Qt.Key.Key_Down:
                 self.imageRotate(1)
+            # colour picker
+            elif event.key() == Qt.Key.Key_Escape:
+                if self._color_picker == True:
+                    QApplication.restoreOverrideCursor()
+                    self._color_picker = False
         #
         return super().eventFilter(source, event)
 
