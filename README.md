@@ -8,6 +8,7 @@ Requirements:
 - config file cfg_imageviewer.py for some application options
 
 Features:
+- colour picker
 - animated images
 - zoom
 - rotating (except for animated images)
