@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.7
+# V. 0.7.1
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -349,8 +349,8 @@ class QImageViewer(QMainWindow):
         if self._is_resized == True:
             self._is_resized = False
             self.scrollarea_size = self.scrollArea.size()
-        _WW = self.scrollarea_size.width()-self.hbar_height
-        _HH = self.scrollarea_size.height()-self.vbar_width
+        _WW = self.scrollarea_size.width()#-self.hbar_height
+        _HH = self.scrollarea_size.height()#-self.vbar_width
         #
         ppixmap = None
         self.is_animated = False
@@ -564,7 +564,7 @@ class QImageViewer(QMainWindow):
     
     def on_color_picker(self):
         self._color_picker = True
-        QApplication.setOverrideCursor(Qt.CursorShape.CrossCursor)
+        QApplication.setOverrideCursor(Qt.CursorShape.PointingHandCursor)
     
     def updateActions(self):
         self.zoomInAct.setEnabled(True)
@@ -588,13 +588,12 @@ class QImageViewer(QMainWindow):
         self.adjustScrollBar(self.scrollArea.horizontalScrollBar(), factor)
         self.adjustScrollBar(self.scrollArea.verticalScrollBar(), factor)
         #
-        self.zoomInAct.setEnabled(self.scaleFactor < 3.0)
-        self.zoomOutAct.setEnabled(self.scaleFactor > 0.333)
+        self.zoomInAct.setEnabled(self.scaleFactor/self.pixel_ratio < 3.0)
+        self.zoomOutAct.setEnabled(self.scaleFactor/self.pixel_ratio > 0.01)
         #
         self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
     
     
-    #
     def adjustScrollBar(self, scrollBar, factor):
         scrollBar.setValue(int(factor * scrollBar.value()
                                + ((factor - 1) * scrollBar.pageStep() / 2)))
@@ -693,16 +692,16 @@ class QImageViewer(QMainWindow):
         # mouse scrolling
         if event.type() == QEvent.Type.MouseMove:
             if self.last_time_move_v == 0:
-                self.last_time_move_v = event.pos().y()
-            vdistance = self.last_time_move_v - event.pos().y()
+                self.last_time_move_v = int(event.position().y())
+            vdistance = self.last_time_move_v - int(event.position().y())
             self.vscrollbar.setValue(self.vscrollbar.value() + vdistance)
-            self.last_time_move_v = event.pos().y()
+            self.last_time_move_v = int(event.position().y())
             #
             if self.last_time_move_h == 0:
-                self.last_time_move_h = event.pos().x()
-            hdistance = self.last_time_move_h - event.pos().x()
+                self.last_time_move_h = int(event.position().x())
+            hdistance = self.last_time_move_h - int(event.position().x())
             self.hscrollbar.setValue(self.hscrollbar.value() + hdistance)
-            self.last_time_move_h = event.pos().x()
+            self.last_time_move_h = int(event.position().x())
             return True
         elif event.type() == QEvent.Type.MouseButtonRelease:
             self.last_time_move_h = 0
@@ -711,9 +710,9 @@ class QImageViewer(QMainWindow):
         elif event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
                 if self._color_picker == True:
-                    _pix = self.grab(QRect(event.pos().x(),event.pos().y(),1,1))
+                    _pix = self.scrollArea.grab(QRect(int(event.position().x()),int(event.position().y()),1,1))
                     _img = _pix.toImage()
-                    _color_picked = _img.pixelColor(1,1).name(QColor.NameFormat.HexRgb)
+                    _color_picked = _img.pixelColor(0,0).name(QColor.NameFormat.HexRgb)
                     _clipboard = QGuiApplication.clipboard()
                     _clipboard.setText(_color_picked)
                     QApplication.restoreOverrideCursor()
