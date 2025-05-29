@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.7.1
+# V. 0.7.2
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -57,14 +57,14 @@ for el in with_pil:
 WW = 800
 HH = 600
 try:
-    with open ("winsize.cfg", "r") as ifile:
+    with open (os.path.join(main_dir, "winsize.cfg"), "r") as ifile:
         fcontent = ifile.readline()
         WW1, HH1 = fcontent.split(";")
         WW = int(WW1)
         HH = int(HH1.strip())
 except:
     try:
-        with open("winsize.cfg", "w") as ifile:
+        with open(os.path.join(main_dir, "winsize.cfg"), "w") as ifile:
             ifile.write("{};{}".format(WW, HH))
     except:
         pass
@@ -608,7 +608,7 @@ class QImageViewer(QMainWindow):
         new_h = self.size().height()
         if new_w != int(WW) or new_h != int(HH):
             try:
-                ifile = open("winsize.cfg", "w")
+                ifile = open(os.path.join(main_dir, "winsize.cfg"), "w")
                 ifile.write("{};{}".format(new_w, new_h))
                 ifile.close()
             except Exception as E:
