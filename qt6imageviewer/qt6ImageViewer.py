@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.7.2
+# V. 0.8
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -10,7 +10,10 @@ from cfg_imageviewer import *
 
 skip_pil = 0
 if with_pil:
-    from PIL import Image, ImageQt
+    try:
+        from PIL import Image, ImageQt
+    except:
+        skip_pil = 1
 else:
     skip_pil = 1
 
@@ -21,6 +24,7 @@ MY_HOME = os.path.expanduser('~')
 main_dir = os.getcwd()
 
 os.chdir(MY_HOME)
+# os.chdir(main_dir)
 
 # the image folder
 IMAGE_FOLDER = None
@@ -41,6 +45,7 @@ if with_pil:
 fformats = fformats_tmp[0:-1]
 
 dialog_filters = 'Images ({});;All files (*)'.format(fformats)
+dialog_filters2 = 'Images ({});;All files (*)'.format("*.png *.jpg *.jpeg")
 
 # mimetypes format
 SUPPORTED_MIME = []
@@ -215,7 +220,7 @@ class QImageViewer(QMainWindow):
         self.createMenus()
         #
         self.setWindowTitle("Image Viewer")
-        self.setWindowIcon(QIcon(os.path.join(main_dir, "QImageViewer.svg")))
+        self.setWindowIcon(QIcon(os.path.join(main_dir, "icons/QImageViewer.svg")))
         #
         self.layout().setContentsMargins(0,0,0,0)
         self.scrollArea.setContentsMargins(0,0,0,0)
@@ -226,6 +231,7 @@ class QImageViewer(QMainWindow):
         self._is_resized = False
         #
         self._color_picker = False
+        self._color_picker_d = False
         
     
     def showEvent(self, e):
@@ -507,12 +513,41 @@ class QImageViewer(QMainWindow):
         self.tool2Act = QAction("{}".format(TOOL2NAME or "Tool2"), self, shortcut="Ctrl+2", enabled=True, triggered=self.tool2)
         self.tool3Act = QAction("{}".format(TOOL3NAME or "Tool3"), self, shortcut="Ctrl+3", enabled=True, triggered=self.tool3)
         #
-        self.tool4Act = QAction("{}".format("Color picker"), self, shortcut="Ctrl+4", enabled=True, triggered=self.on_color_picker)
+        self.tool4Act = QAction("{}".format("Color picker - clipboard"), self, shortcut="Ctrl+4", enabled=True, triggered=self.on_color_picker)
+        self.tool5Act = QAction("{}".format("Color picker - dialog"), self, shortcut="Ctrl+5", enabled=True, triggered=self.on_color_picker_d)
+        #
+        self.saveAsPNG = QAction("{}".format("Save as PNG"), self)
+        self.saveAsPNG.setShortcut("Ctrl+5")
+        self.saveAsPNG.setEnabled(True)
+        self.saveAsPNG.triggered.connect(lambda:self.on_save_image("png"))
+        #
+        self.saveAsJPG = QAction("{}".format("Save as JPG"), self)
+        self.saveAsJPG.setShortcut("Ctrl+6")
+        self.saveAsJPG.setEnabled(True)
+        self.saveAsJPG.triggered.connect(lambda:self.on_save_image("jpg"))
+        
+    def on_save_image(self, _code):
+        ppixmap = self.imageLabel.pixmap()
+        options = QFileDialog().options()
+        fileName, _ = QFileDialog.getSaveFileName(self, 'Save File', MY_HOME, dialog_filters2, options=options)
+        if fileName:
+            if not fileName.split(".")[-1] in ["png","jpg","jpeg"]:
+                fileName = fileName+"."+_code
+            ret = ppixmap.save(fileName, _code)
+            if ret:
+                MyDialog("Info", "Saved.", self)
+            else:
+                MyDialog("Error", "Some errors occoured.", self)
         
     def createMenus(self):
         self.fileMenu = QMenu("&File", self)
         self.fileMenu.addAction(self.openAct)
         self.fileMenu.addAction(self.printAct)
+        self.fileMenu.addSeparator()
+        self.subMenuSave = QMenu("&Save as...")
+        self.subMenuSave.addAction(self.saveAsPNG)
+        self.subMenuSave.addAction(self.saveAsJPG)
+        self.fileMenu.addMenu(self.subMenuSave)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.infoAct)
         self.fileMenu.addSeparator()
@@ -533,6 +568,7 @@ class QImageViewer(QMainWindow):
         self.toolMenu.addAction(self.tool2Act)
         self.toolMenu.addAction(self.tool3Act)
         self.toolMenu.addAction(self.tool4Act)
+        self.toolMenu.addAction(self.tool5Act)
         #
         self.menuBar().addMenu(self.fileMenu)
         self.menuBar().addMenu(self.viewMenu)
@@ -564,6 +600,10 @@ class QImageViewer(QMainWindow):
     
     def on_color_picker(self):
         self._color_picker = True
+        QApplication.setOverrideCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def on_color_picker_d(self):
+        self._color_picker_d = True
         QApplication.setOverrideCursor(Qt.CursorShape.PointingHandCursor)
     
     def updateActions(self):
@@ -718,6 +758,18 @@ class QImageViewer(QMainWindow):
                     QApplication.restoreOverrideCursor()
                     self._color_picker = False
                     return True
+                elif self._color_picker_d == True:
+                    _pix = self.scrollArea.grab(QRect(int(event.position().x()),int(event.position().y()),1,1))
+                    _img = _pix.toImage()
+                    # _color_picked = _img.pixelColor(0,0).name(QColor.NameFormat.HexRgb)
+                    cdlg = QColorDialog(self)
+                    cdlg.setOptions(QColorDialog.ColorDialogOption.ShowAlphaChannel)
+                    cdlg.setCurrentColor(_img.pixelColor(0,0))
+                    # cdlg.setModal(False)
+                    cdlg.show()
+                    QApplication.restoreOverrideCursor()
+                    self._color_picker_d = False
+                    return True
         # key navigation
         elif event.type() == QEvent.Type.KeyPress:
             # next or previous file
@@ -735,6 +787,9 @@ class QImageViewer(QMainWindow):
                 if self._color_picker == True:
                     QApplication.restoreOverrideCursor()
                     self._color_picker = False
+                elif self._color_picker_d == True:
+                    QApplication.restoreOverrideCursor()
+                    self._color_picker_d = False
         #
         return super().eventFilter(source, event)
 
@@ -751,7 +806,7 @@ class MyDialog(QMessageBox):
         elif args[0] == "Question":
             self.setIcon(QMessageBox.Icon.Question)
             self.setStandardButtons(QMessageBox.StandardButton.Ok|QMessageBox.StandardButton.Cancel)
-        self.setWindowIcon(QIcon("icons/program.svg"))
+        self.setWindowIcon(QIcon(os.path.join(main_dir,"icons/dialog.png")))
         self.setWindowTitle(args[0])
         self.resize(50,50)
         self.setText(args[1])
