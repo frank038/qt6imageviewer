@@ -517,12 +517,12 @@ class QImageViewer(QMainWindow):
         self.tool5Act = QAction("{}".format("Color picker - dialog"), self, shortcut="Ctrl+5", enabled=True, triggered=self.on_color_picker_d)
         #
         self.saveAsPNG = QAction("{}".format("Save as PNG"), self)
-        self.saveAsPNG.setShortcut("Ctrl+5")
+        # self.saveAsPNG.setShortcut("Ctrl+5")
         self.saveAsPNG.setEnabled(True)
         self.saveAsPNG.triggered.connect(lambda:self.on_save_image("png"))
         #
         self.saveAsJPG = QAction("{}".format("Save as JPG"), self)
-        self.saveAsJPG.setShortcut("Ctrl+6")
+        # self.saveAsJPG.setShortcut("Ctrl+6")
         self.saveAsJPG.setEnabled(True)
         self.saveAsJPG.triggered.connect(lambda:self.on_save_image("jpg"))
         
@@ -638,11 +638,9 @@ class QImageViewer(QMainWindow):
         scrollBar.setValue(int(factor * scrollBar.value()
                                + ((factor - 1) * scrollBar.pageStep() / 2)))
     
-    #
     def closeEvent(self, event):
         self.on_close()
     
-    #
     def on_close(self):
         new_w = self.size().width()
         new_h = self.size().height()
