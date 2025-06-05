@@ -8,12 +8,14 @@ Requirements:
 - config file cfg_imageviewer.py for some application options
 
 Features:
-- colour picker (the colour in the form #rrggbb will be copied in the clipboard)
+- colour picker - clipboard (the colour in the form #rrggbb will be copied in the clipboard)
+- colour picker - dialog (a dialog will appear)
 - animated images
 - zoom
 - rotating (except for animated images)
 - lateral panel
 - load dialog
+- save dialog (image to png or jpg formats)
 - can launch three custom command
 - basic image info
 
