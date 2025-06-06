@@ -1,12 +1,13 @@
 #!/usr/bin/python3
-# V. 0.8.2
+# V. 0.9
 
-from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt6.QtWidgets import QColorDialog, QListView, QAbstractItemView, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QFileDialog
 import subprocess, os, time
 from cfg_imageviewer import *
+import io
 
 skip_pil = 0
 if with_pil:
@@ -93,7 +94,6 @@ class lateralThread(QThread):
             for el in _list:
                 fileName = os.path.join(self._data, el)
                 image_type = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase.MatchMode.MatchDefault).name()
-                # find better filter
                 if image_type in SUPPORTED_MIME:
                     _icon = None
                     try:
@@ -159,7 +159,7 @@ class QImageViewer(QMainWindow):
         self.is_key_nav = 0
         # a gif can be animated
         self.is_animated = False
-        self.ianimated = None
+        self._movie = None
         #
         # the viewer
         self.imageLabel = QLabel()
@@ -239,6 +239,10 @@ class QImageViewer(QMainWindow):
         #
         self._color_picker = False
         self._color_picker_d = False
+        #
+        self.original_imageLabel = None
+        #
+        self.is_rotated = False
         
     
     def showEvent(self, e):
@@ -335,12 +339,6 @@ class QImageViewer(QMainWindow):
         self.directory_current_idx = self.directory_content.index(_image_name)
         #
         ret = self.on_open(os.path.join(IMAGE_FOLDER,_image_name))
-        # # error in reading a file
-        # if ret == -2:
-            # if ttype == "i":
-                # self.on_open2(new_idx+1, ttype)
-            # elif ttype == "d":
-                # self.on_open2(new_idx-1, ttype)
     
     # at start or after opening a new folder
     def on_on_open(self):
@@ -358,42 +356,36 @@ class QImageViewer(QMainWindow):
     
     # 
     def on_open(self, fileName):
+        self.is_rotated = False
         # update the scrollarea size
         if self._is_resized == True:
             self._is_resized = False
-            self.scrollarea_size = self.scrollArea.size()
-        _WW = self.scrollarea_size.width()#-self.hbar_height
-        _HH = self.scrollarea_size.height()#-self.vbar_width
+        #
+        _WW = self.scrollarea_size.width()
+        _HH = self.scrollarea_size.height()
         #
         ppixmap = None
         self.is_animated = False
-        if self.ianimated:
-            self.ianimated.stop()
-            self.ianimated = None
+        if self._movie:
+            self._movie.stop()
+            self._movie = None
         #
-        image_type = ""
+        qbuffer = None
         try:
             image_type = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase.MatchMode.MatchDefault).name()
+            if image_type not in SUPPORTED_MIME:
+                return -2
             if image_type in img_skipped:
                 if not self.is_key_nav:
                     QMessageBox.information(self, "Image Viewer", "Cannot load {}.\nSkipped by user.".format(fileName))
                 return -2
             elif (skip_pil == 0) and (image_type in with_pil):
                 image = Image.open(fileName)
-                ppixmap = ImageQt.toqpixmap(image)
-                if not ppixmap:
-                    QMessageBox.information(self, "Image Viewer", "Cannot load {} with PIL.".format(fileName))
-                    return -1
-            else:
-                image = QImage(fileName)
-                if image.isNull():
-                    if not self.is_key_nav:
-                        QMessageBox.information(self, "Image Viewer", "Cannot load {}.".format(fileName))
-                    return -2
-                if image_type in animated_format:
-                    self.is_animated = True
-                else:
-                    ppixmap = QPixmap.fromImage(image)
+                bytesio = io.BytesIO()
+                image.save(fp=bytesio, format="PNG")#, save_all=True)#, append_images=imgs, save_all=True, duration=GIF_DELAY, loop=0)
+                qbytearray = QByteArray(bytesio.getvalue())
+                bytesio.close()
+                qbuffer = QBuffer(qbytearray)
         except Exception as E:
             QMessageBox.information(self, "Image Viewer", "Error {}.".format(str(E)))
             return -1
@@ -404,37 +396,37 @@ class QImageViewer(QMainWindow):
         #
         self.scaleFactor = 1.0
         #
-        if self.is_animated:
-            self.ianimated = QMovie(fileName)
-            self.imageLabel.setMovie(self.ianimated)
-            self.ianimated.start()
-            # 
-            ppixmap = self.ianimated.currentPixmap()
-            self.ianimated.stop()
-            #
-            image_width = ppixmap.width()
-            image_height = ppixmap.height()
-            #
-            _a = (_WW-2)/image_width
-            _b = (_HH-2)/image_height
-            self.scaleFactor = min(_a, _b)
-            #
-            self.imageLabel.resize(self.scaleFactor * ppixmap.size())
-            self.scaleFactorStart = self.scaleFactor
-            #
-            self.ianimated.start()
+        if qbuffer == None:
+            self._movie = QMovie(fileName)
         else:
-            self.imageLabel.setPixmap(ppixmap)
-            #
-            image_width = ppixmap.width()
-            image_height = ppixmap.height()
-            #
-            _a = (_WW-2)/image_width
-            _b = (_HH-2)/image_height
-            self.scaleFactor = min(_a, _b)
-            #
-            self.imageLabel.resize(self.scaleFactor * ppixmap.size())
-            self.scaleFactorStart = self.scaleFactor
+            self._movie = QMovie()
+            self._movie.setDevice(qbuffer)
+            # self._movie.setCacheMode(QMovie.CacheAll)
+        #
+        self.imageLabel.setMovie(self._movie)
+        self.original_imageLabel = self.imageLabel
+        #
+        self._movie.start()
+        ppixmap = self._movie.currentPixmap()
+        if ppixmap.isNull():
+            QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
+            return -1
+        self._movie.stop()
+        #
+        image_width = ppixmap.width()
+        image_height = ppixmap.height()
+        #
+        _a = (_WW-4)/image_width#/self.pixel_ratio
+        _b = (_HH-4)/image_height#/self.pixel_ratio
+        self.scaleFactor = min(_a, _b)
+        #
+        self.imageLabel.resize(self.scaleFactor * ppixmap.size())
+        self.scaleFactorStart = self.scaleFactor
+        #
+        _frames = self._movie.frameCount()
+        if _frames > 1:
+            self.is_animated = True
+            self._movie.start()
         #
         if self.imageLabel.isVisible() == False:
             self.imageLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
@@ -453,29 +445,36 @@ class QImageViewer(QMainWindow):
             self.rotateLeftAct.setEnabled(True)
             self.rotateRightAct.setEnabled(True)
     
-    #
     def print_(self):
         dialog = QPrintDialog(self.printer, self)
-        if dialog.exec():
+        ret = dialog.exec()
+        if ret:
             painter = QPainter(self.printer)
             rect = painter.viewport()
-            
+            #
             ppixmap = None
-            if self.is_animated:
-                self.ianimated.stop()
-                _frames = self.ianimated.frameCount()
-                if _frames > 1:
-                    self.ianimated.jumpToFrame(0)
-                ppixmap = self.ianimated.currentPixmap()
-                self.ianimated.start()
-            else:
+            if self.is_rotated:
                 ppixmap = self.imageLabel.pixmap()
-            
+            else:
+                if self.is_animated:
+                    self._movie.stop()
+                    _frames = self._movie.frameCount()
+                    if _frames > 1:
+                        self._movie.jumpToFrame(0)
+                ppixmap = self._movie.currentPixmap()
+            if self.is_animated:
+                self._movie.start()
+            #
             size = ppixmap.size()
             size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
             painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
             painter.setWindow(ppixmap.rect())
             painter.drawPixmap(0, 0, ppixmap)
+        dialog.done(1)
+        if ret == 1:
+            MyDialog("Info", "Printed.", self)
+        else:
+            MyDialog("Error", "Error.", self)
     
     def info_(self):
         if self.is_animated:
@@ -483,13 +482,16 @@ class QImageViewer(QMainWindow):
             ph = ""
             pd = ""
             try:
-                ppixmap = self.ianimated.currentPixmap()
+                if self.is_rotated:
+                    ppixmap = self.imageLabel.pixmap()
+                else:
+                    ppixmap = self._movie.currentPixmap()
                 pw = ppixmap.width()
                 ph = ppixmap.height()
                 pd = ppixmap.depth()
             except:
-                pw = self.ianimated.frameRect().width()
-                ph = self.ianimated.frameRect().height()
+                pw = self._movie.frameRect().width()
+                ph = self._movie.frameRect().height()
                 pd = "Unknown"
             imime = QMimeDatabase().mimeTypeForFile(self.ipath, QMimeDatabase.MatchMode.MatchDefault)
             imime_name = imime.name()
@@ -550,15 +552,17 @@ class QImageViewer(QMainWindow):
         
     def on_save_image(self, _code):
         ppixmap = None
-        if self.is_animated:
-            self.ianimated.stop()
-            _frames = self.ianimated.frameCount()
-            if _frames > 1:
-                self.ianimated.jumpToFrame(0)
-            ppixmap = self.ianimated.currentPixmap()
-            self.ianimated.start()
-        else:
+        if self.is_rotated:
             ppixmap = self.imageLabel.pixmap()
+        else:
+            _frames = self._movie.frameCount()
+            if _frames > 1:
+                self._movie.stop()
+                self._movie.jumpToFrame(0)
+                ppixmap = self._movie.currentPixmap()
+                self._movie.start()
+            else:
+                ppixmap = self._movie.currentPixmap()
         options = QFileDialog().options()
         fileName, _ = QFileDialog.getSaveFileName(self, 'Save File', MY_HOME, dialog_filters2, options=options)
         if fileName:
@@ -654,11 +658,21 @@ class QImageViewer(QMainWindow):
         elif factor == 1.0:
             self.scaleFactor = 1.0/self.pixel_ratio
         else:
+            if (self.scaleFactor/self.pixel_ratio > 3.0) or (self.scaleFactor/self.pixel_ratio < 0.01):
+                return
+            #
             self.scaleFactor *= factor
-        if self.is_animated:
-            ppixmap = self.ianimated.currentPixmap()
-        else:
+        #
+        if self.is_rotated:
             ppixmap = self.imageLabel.pixmap()
+        else:
+            _frames = self._movie.frameCount()
+            if _frames > 1:
+                self._movie.stop()
+                self._movie.jumpToFrame(0)
+            ppixmap = self.original_imageLabel.movie().currentPixmap()
+            if _frames > 1:
+                self._movie.start()
         self.imageLabel.resize(self.scaleFactor * ppixmap.size())
         #
         self.adjustScrollBar(self.scrollArea.horizontalScrollBar(), factor)
@@ -691,9 +705,9 @@ class QImageViewer(QMainWindow):
     # load the next or previous image in the folder
     def keyNav(self, incr_idx):
         self.is_key_nav = 1
-        if self.ianimated:
-            self.ianimated.stop()
-            self.ianimated = None
+        if self._movie:
+            self._movie.stop()
+            self._movie = None
             self.is_animated = False
         #
         len_folder = len(self.directory_content)
@@ -746,8 +760,11 @@ class QImageViewer(QMainWindow):
     def imageRotate(self, ttype):
         if self.is_animated:
             return
-        # 
-        ppixmap = self.imageLabel.pixmap()
+        #
+        if self.is_rotated:
+            ppixmap = self.imageLabel.pixmap()
+        else:
+            ppixmap = self._movie.currentPixmap()
         if ttype == -1:
             image_rotation = 90
         else:
@@ -755,11 +772,10 @@ class QImageViewer(QMainWindow):
         # 
         transform = QTransform().rotate(image_rotation)
         ppixmap = ppixmap.transformed(transform, Qt.TransformationMode.SmoothTransformation)
-        # update the label
+        #
         self.imageLabel.setPixmap(ppixmap)
-        self.imageLabel.adjustSize()
-        self.imageLabel.resize(self.scaleFactor * self.imageLabel.pixmap().size())
-    
+        self.is_rotated = True
+        self.imageLabel.resize(self.scaleFactor * ppixmap.size())
     
     def eventFilter(self, source, event):
         # mouse scrolling
@@ -794,7 +810,6 @@ class QImageViewer(QMainWindow):
                 elif self._color_picker_d == True:
                     _pix = self.scrollArea.grab(QRect(int(event.position().x()),int(event.position().y()),1,1))
                     _img = _pix.toImage()
-                    # _color_picked = _img.pixelColor(0,0).name(QColor.NameFormat.HexRgb)
                     cdlg = QColorDialog(self)
                     cdlg.setOptions(QColorDialog.ColorDialogOption.ShowAlphaChannel)
                     cdlg.setCurrentColor(_img.pixelColor(0,0))

@@ -1,8 +1,6 @@
 # PIL will be used - python list e.g. ["image/gif", "image/ppm"]
 # leave empty to not to use PIL at all: no PIL python binding needed
 with_pil = ["image/x-tga"]
-# could be animated
-animated_format = ["image/gif", "image/webp"]
 # image formats to be skipped
 img_skipped = []
 # left panel at start: 0 off - 1 on
