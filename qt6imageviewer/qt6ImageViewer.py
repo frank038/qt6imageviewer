@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.8
+# V. 0.8.1
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -527,7 +527,16 @@ class QImageViewer(QMainWindow):
         self.saveAsJPG.triggered.connect(lambda:self.on_save_image("jpg"))
         
     def on_save_image(self, _code):
-        ppixmap = self.imageLabel.pixmap()
+        ppixmap = None
+        if self.is_animated:
+            self.ianimated.stop()
+            _frames = self.ianimated.frameCount()
+            if _frames > 1:
+                self.ianimated.jumpToFrame(0)
+            ppixmap = self.ianimated.currentPixmap()
+            self.ianimated.start()
+        else:
+            ppixmap = self.imageLabel.pixmap()
         options = QFileDialog().options()
         fileName, _ = QFileDialog.getSaveFileName(self, 'Save File', MY_HOME, dialog_filters2, options=options)
         if fileName:
