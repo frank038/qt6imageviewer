@@ -18,6 +18,8 @@ Features:
 - save dialog (image to png or jpg formats)
 - can launch three custom command
 - basic image info
+- fit to window
+- original size
 
 About the custom actions: from the toolbar can be launched three custom actions. Their names can be changed tin the config file. The bash scripts executed by those actions are: tool1.sh, tool2.sh and tool3.sh. The current visualized image full path will be passed to those bash scripts as argument.
 
