@@ -452,11 +452,23 @@ class QImageViewer(QMainWindow):
         if dialog.exec():
             painter = QPainter(self.printer)
             rect = painter.viewport()
-            size = self.imageLabel.pixmap().size()
-            size.scale(rect.size(), Qt.KeepAspectRatio)
+            
+            ppixmap = None
+            if self.is_animated:
+                self.ianimated.stop()
+                _frames = self.ianimated.frameCount()
+                if _frames > 1:
+                    self.ianimated.jumpToFrame(0)
+                ppixmap = self.ianimated.currentPixmap()
+                self.ianimated.start()
+            else:
+                ppixmap = self.imageLabel.pixmap()
+            
+            size = ppixmap.size()
+            size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
             painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
-            painter.setWindow(self.imageLabel.pixmap().rect())
-            painter.drawPixmap(0, 0, self.imageLabel.pixmap())
+            painter.setWindow(ppixmap.rect())
+            painter.drawPixmap(0, 0, ppixmap)
     
     def info_(self):
         if self.is_animated:
