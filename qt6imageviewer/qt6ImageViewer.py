@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.8.1
+# V. 0.8.2
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -100,7 +100,11 @@ class lateralThread(QThread):
                         if (skip_pil == 0) and (image_type in with_pil):
                             image = Image.open(fileName)
                             _pix = ImageQt.toqpixmap(image)
+                            if _pix.isNull():
+                                continue
                             _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            if _pix.isNull():
+                                continue
                             _icon = QIcon(_pix)
                             if _icon.isNull():
                                 del _icon
@@ -109,11 +113,14 @@ class lateralThread(QThread):
                         continue
                     #
                     try:
-                        _pix = QPixmap(fileName).scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
-                        _icon = QIcon(_pix)
-                        if _icon.isNull():
-                            del _icon
-                            continue
+                        if (skip_pil == 0) and (image_type not in with_pil):
+                            _pix = QPixmap(fileName).scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            if _pix.isNull():
+                                continue
+                            _icon = QIcon(_pix)
+                            if _icon.isNull():
+                                del _icon
+                                continue
                     except:
                         continue
                     #
@@ -505,8 +512,10 @@ class QImageViewer(QMainWindow):
         self.scaleImage(0.8)
     
     def normalSize(self):
-        # self.scaleImage(self.scaleFactorStart/self.scaleFactor)
         self.scaleImage(1.0)
+    
+    def fitSize(self):
+        self.scaleImage("fit")
     
     def createActions(self):
         self.openAct = QAction("&Open...", self, shortcut="Ctrl+o", triggered=self.open)
@@ -517,6 +526,7 @@ class QImageViewer(QMainWindow):
         self.zoomInAct = QAction("Zoom In (25%)", self, shortcut="Ctrl++", enabled=False, triggered=self.zoomIn)
         self.zoomOutAct = QAction("Zoom Out (25%)", self, shortcut="Ctrl+-", enabled=False, triggered=self.zoomOut)
         self.normalSizeAct = QAction("Normal Size", self, shortcut="Ctrl+n", enabled=False, triggered=self.normalSize)
+        self.fitSizeAct = QAction("Fit to window", self, shortcut="Ctrl+f", enabled=False, triggered=self.fitSize)
         self.rotateLeftAct = QAction("Rotate Left", self, shortcut="Ctrl+e", enabled=False, triggered=self.rotateLeft)
         self.rotateRightAct = QAction("Rotate Right", self, shortcut="Ctrl+r", enabled=False, triggered=self.rotateRight)
         self.leftPanelAct = QAction("Left Panel", self, shortcut="Ctrl+p", enabled=False, triggered=self.on_leftpanelaction)
@@ -578,6 +588,7 @@ class QImageViewer(QMainWindow):
         self.viewMenu.addAction(self.zoomInAct)
         self.viewMenu.addAction(self.zoomOutAct)
         self.viewMenu.addAction(self.normalSizeAct)
+        self.viewMenu.addAction(self.fitSizeAct)
         self.viewMenu.addSeparator()
         self.viewMenu.addAction(self.rotateLeftAct)
         self.viewMenu.addAction(self.rotateRightAct)
@@ -631,12 +642,16 @@ class QImageViewer(QMainWindow):
         self.zoomInAct.setEnabled(True)
         self.zoomOutAct.setEnabled(True)
         self.normalSizeAct.setEnabled(True)
+        self.fitSizeAct.setEnabled(True)
         self.rotateLeftAct.setEnabled(True)
         self.rotateRightAct.setEnabled(True)
         self.leftPanelAct.setEnabled(True)
     
     def scaleImage(self, factor):
-        if factor == 1.0:
+        if factor == "fit":
+            self.scaleFactor = self.scaleFactorStart
+            factor = self.scaleFactor
+        elif factor == 1.0:
             self.scaleFactor = 1.0/self.pixel_ratio
         else:
             self.scaleFactor *= factor
@@ -653,7 +668,6 @@ class QImageViewer(QMainWindow):
         self.zoomOutAct.setEnabled(self.scaleFactor/self.pixel_ratio > 0.01)
         #
         self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
-    
     
     def adjustScrollBar(self, scrollBar, factor):
         scrollBar.setValue(int(factor * scrollBar.value()
