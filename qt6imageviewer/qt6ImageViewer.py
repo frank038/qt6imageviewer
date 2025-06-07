@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.9
+# V. 0.9.1
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -477,35 +477,24 @@ class QImageViewer(QMainWindow):
             MyDialog("Error", "Error.", self)
     
     def info_(self):
-        if self.is_animated:
-            pw = ""
-            ph = ""
-            pd = ""
-            try:
-                if self.is_rotated:
-                    ppixmap = self.imageLabel.pixmap()
-                else:
-                    ppixmap = self._movie.currentPixmap()
-                pw = ppixmap.width()
-                ph = ppixmap.height()
-                pd = ppixmap.depth()
-            except:
-                pw = self._movie.frameRect().width()
-                ph = self._movie.frameRect().height()
-                pd = "Unknown"
-            imime = QMimeDatabase().mimeTypeForFile(self.ipath, QMimeDatabase.MatchMode.MatchDefault)
-            imime_name = imime.name()
-            QMessageBox.information(self, "Image Info", "Name: {}\nWidth: {}\nHeight: {}\nDepth: {}\nType: {}".format(os.path.basename(self.ipath), pw, ph, pd, imime_name))
-            return
-        # 
-        ppixmap = self.imageLabel.pixmap()
-        if not ppixmap.isNull():
+        pw = ""
+        ph = ""
+        pd = ""
+        try:
+            if self.is_rotated:
+                ppixmap = self.imageLabel.pixmap()
+            else:
+                ppixmap = self._movie.currentPixmap()
             pw = ppixmap.width()
             ph = ppixmap.height()
             pd = ppixmap.depth()
-            imime = QMimeDatabase().mimeTypeForFile(self.ipath, QMimeDatabase.MatchMode.MatchDefault)
-            imime_name = imime.name()
-            QMessageBox.information(self, "Image Info", "Name: {}\nWidth: {}\nHeight: {}\nDepth: {}\nType: {}".format(os.path.basename(self.ipath), pw, ph, pd, imime_name))
+        except:
+            pw = self._movie.frameRect().width()
+            ph = self._movie.frameRect().height()
+            pd = "Unknown"
+        imime = QMimeDatabase().mimeTypeForFile(self.ipath, QMimeDatabase.MatchMode.MatchDefault)
+        imime_name = imime.name()
+        QMessageBox.information(self, "Image Info", "Name: {}\nWidth: {}\nHeight: {}\nDepth: {}\nType: {}".format(os.path.basename(self.ipath), pw, ph, pd, imime_name))
     
     def zoomIn(self):
         self.scaleImage(1.25)
