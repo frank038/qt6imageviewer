@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.9.1
+# V. 0.9.2
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -96,44 +96,48 @@ class lateralThread(QThread):
                 image_type = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase.MatchMode.MatchDefault).name()
                 if image_type in SUPPORTED_MIME:
                     _icon = None
-                    try:
-                        if (skip_pil == 0) and (image_type in with_pil):
+                    _pix = None
+                    if (skip_pil == 0) and (image_type in with_pil):
+                        try:
                             image = Image.open(fileName)
+                            image = image.resize((ICON_SIZE,ICON_SIZE))
                             _pix = ImageQt.toqpixmap(image)
                             if _pix.isNull():
                                 continue
-                            _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
                             if _pix.isNull():
                                 continue
                             _icon = QIcon(_pix)
                             if _icon.isNull():
                                 del _icon
                                 continue
-                    except:
-                        continue
+                        except:
+                            continue
                     #
-                    try:
-                        if (skip_pil == 0) and (image_type not in with_pil):
-                            _pix = QPixmap(fileName).scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                    else:
+                        try:
+                        # if (skip_pil == 0) and (image_type not in with_pil):
+                            _pix = QPixmap(fileName)#.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
                             if _pix.isNull():
+                                continue
+                            _pix = _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            if _pix.isNull() or _pix == None:
                                 continue
                             _icon = QIcon(_pix)
                             if _icon.isNull():
                                 del _icon
                                 continue
-                    except:
-                        continue
+                        except:
+                            continue
                     #
-                    _li = QListWidgetItem(_icon, None)
-                    _li.setToolTip(el)
-                    _li.setBackground(QBrush(QColor("#E5E5E5")))
-                    _li.setSizeHint(QSize(ICON_SIZE,ICON_SIZE))
-                    self.list_widget.addItem(_li)
-                    # time.sleep(0.001)
+                    if _icon != None:
+                        _li = QListWidgetItem(_icon, None)
+                        _li.setToolTip(el)
+                        _li.setBackground(QBrush(QColor("#E5E5E5")))
+                        _li.setSizeHint(QSize(_pix.width(),_pix.height()))
+                        self.list_widget.addItem(_li)
             #
             self.lateral1sig.emit(["done", self.ipath])
             data_run = 0
-
 
 class QImageViewer(QMainWindow):
     def __init__(self, ipath):
@@ -189,29 +193,29 @@ class QImageViewer(QMainWindow):
         self.main_box.setContentsMargins(0,0,0,0)
         self.main_widget.setLayout(self.main_box)
         #
-        #### lateral scrollarea
-        self.lat_scrollarea = QScrollArea()
-        self.lat_scrollarea.setContentsMargins(0,0,0,0)
-        self.lat_scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.lat_scrollarea.setVisible(False)
-        self.lat_scrollarea.setWidgetResizable(True)
-        self.lat_scrollarea.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        self.lat_scrollarea.setFixedWidth(ICON_SIZE+10)
-        #
+        #### lateral panel
         self.lat_widget = QListWidget()
-        # self.lat_widget.setFixedWidth(ICON_SIZE+10)
-        # self.lat_widget.setViewMode(QListView.ViewMode.IconMode)
+        _lat_spacing = 1
+        self.lat_widget.setSpacing(_lat_spacing)
+        _bpad = _lat_spacing+int(self.lat_widget.verticalScrollBar().height()/self.pixel_ratio)
+        self.lat_widget.setMaximumWidth(ICON_SIZE+_bpad)
+        self.lat_widget.setFixedWidth(ICON_SIZE+_bpad)
+        self.lat_widget.setViewMode(QListView.ViewMode.ListMode)
+        self.lat_widget.setItemAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lat_widget.setUniformItemSizes(False)
+        self.lat_widget.setFlow(QListView.Flow.TopToBottom)
         self.lat_widget.setContentsMargins(0,0,0,0)
         self.lat_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.lat_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.lat_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        self.lat_scrollarea.setWidget(self.lat_widget)
+        self.lat_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.lat_widget.setVisible(False)
         #
-        self.lat_widget.setGridSize(QSize(ICON_SIZE+2,ICON_SIZE+2))
+        # self.lat_widget.setGridSize(QSize(ICON_SIZE+2,ICON_SIZE+2))
         self.lat_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.lat_widget.itemClicked.connect(self.on_lat_item_clicked)
         #
-        self.main_box.addWidget(self.lat_scrollarea, stretch=1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.main_box.addWidget(self.lat_widget, stretch=1)#, alignment=Qt.AlignmentFlag.AlignCenter)
         ###
         self.main_box.addWidget(self.scrollArea, stretch=10)
         # the folder containing all the images
@@ -283,12 +287,11 @@ class QImageViewer(QMainWindow):
     
     def on_lateral1_panel(self):
         if LEFT_PANEL == 1:
-            # the lateral scrollarea
-            self.lat_scrollarea.setVisible(True)
+            self.lat_widget.setVisible(True)
             self.pop_list_widget(self.ipath)
         elif LEFT_PANEL == 0:
-            if self.lat_scrollarea.isVisible():
-                self.lat_scrollarea.setVisible(False)
+            if self.lat_widget.isVisible():
+                self.lat_widget.setVisible(False)
             if self.lateral1thread != None:
                 try:
                     if self.lateral1thread.isRunning():
