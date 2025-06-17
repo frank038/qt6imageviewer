@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.9.2
+# V. 0.9.3
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -119,7 +119,7 @@ class lateralThread(QThread):
                             _pix = QPixmap(fileName)#.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
                             if _pix.isNull():
                                 continue
-                            _pix = _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            _pix = _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                             if _pix.isNull() or _pix == None:
                                 continue
                             _icon = QIcon(_pix)
@@ -406,15 +406,30 @@ class QImageViewer(QMainWindow):
             self._movie.setDevice(qbuffer)
             # self._movie.setCacheMode(QMovie.CacheAll)
         #
-        self.imageLabel.setMovie(self._movie)
-        self.original_imageLabel = self.imageLabel
         #
-        self._movie.start()
-        ppixmap = self._movie.currentPixmap()
-        if ppixmap.isNull():
-            QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
-            return -1
-        self._movie.stop()
+        if self._movie.frameCount() > 1:
+            self.is_animated = True
+            self.imageLabel.setMovie(self._movie)
+            self.original_imageLabel = self.imageLabel
+            #
+            self._movie.start()
+            ppixmap = self._movie.currentPixmap()
+            if ppixmap.isNull():
+                QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
+                return -1
+            self._movie.stop()
+        else:
+            if qbuffer:
+                self._movie.start()
+                ppixmap = self._movie.currentPixmap()
+                self._movie.stop()
+            else:
+                ppixmap = QPixmap(fileName)
+            if not ppixmap.isNull():
+                self.imageLabel.setPixmap(ppixmap)
+            else:
+                QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
+                return -1
         #
         image_width = ppixmap.width()
         image_height = ppixmap.height()
@@ -426,9 +441,10 @@ class QImageViewer(QMainWindow):
         self.imageLabel.resize(self.scaleFactor * ppixmap.size())
         self.scaleFactorStart = self.scaleFactor
         #
-        _frames = self._movie.frameCount()
-        if _frames > 1:
-            self.is_animated = True
+        if self.is_animated:
+            # _frames = self._movie.frameCount()
+            # if _frames > 1:
+                # self.is_animated = True
             self._movie.start()
         #
         if self.imageLabel.isVisible() == False:
@@ -544,7 +560,7 @@ class QImageViewer(QMainWindow):
         
     def on_save_image(self, _code):
         ppixmap = None
-        if self.is_rotated:
+        if self.is_rotated or not self.is_animated:
             ppixmap = self.imageLabel.pixmap()
         else:
             _frames = self._movie.frameCount()
@@ -655,7 +671,7 @@ class QImageViewer(QMainWindow):
             #
             self.scaleFactor *= factor
         #
-        if self.is_rotated:
+        if self.is_rotated or not self.is_animated:
             ppixmap = self.imageLabel.pixmap()
         else:
             _frames = self._movie.frameCount()
@@ -753,7 +769,7 @@ class QImageViewer(QMainWindow):
         if self.is_animated:
             return
         #
-        if self.is_rotated:
+        if self.is_rotated or not self.is_animated:
             ppixmap = self.imageLabel.pixmap()
         else:
             ppixmap = self._movie.currentPixmap()
