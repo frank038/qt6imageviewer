@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.9.3
+# V. 0.9.4
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -500,7 +500,7 @@ class QImageViewer(QMainWindow):
         ph = ""
         pd = ""
         try:
-            if self.is_rotated:
+            if self.is_rotated or not self.is_animated:
                 ppixmap = self.imageLabel.pixmap()
             else:
                 ppixmap = self._movie.currentPixmap()
