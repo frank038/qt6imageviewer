@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 0.9.4
+# V. 0.9.5
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
@@ -150,8 +150,8 @@ class QImageViewer(QMainWindow):
         #
         self.ipath = ipath
         self.curr_dir = None
-        if self.ipath:
-            self.curr_dir = os.path.dirname(self.ipath)
+        # if self.ipath:
+            # self.curr_dir = os.path.dirname(self.ipath)
         self.printer = QPrinter()
         # actual scaling factor
         self.scaleFactor = 0.0
@@ -164,6 +164,8 @@ class QImageViewer(QMainWindow):
         # a gif can be animated
         self.is_animated = False
         self._movie = None
+        # multipage but not animated
+        self.is_multipage = False
         #
         # the viewer
         self.imageLabel = QLabel()
@@ -220,8 +222,8 @@ class QImageViewer(QMainWindow):
         self.main_box.addWidget(self.scrollArea, stretch=10)
         # the folder containing all the images
         self.directory_content = []
-        if self.curr_dir:
-            self.directory_content = os.listdir(self.curr_dir)
+        # if self.curr_dir:
+            # self.directory_content = os.listdir(self.curr_dir)
         #
         self.lateral1thread = None
         #
@@ -254,6 +256,8 @@ class QImageViewer(QMainWindow):
         self.scrollarea_size = self.scrollArea.size()
         # at start with image name as argument
         if self.ipath:
+            if self.curr_dir == os.path.dirname(self.ipath):
+                return
             self.on_on_open()
             ret = self.on_open(self.ipath)
             if ret == -1:
@@ -357,7 +361,7 @@ class QImageViewer(QMainWindow):
         # list the content of the directory
         self.directory_content = os.listdir(self.curr_dir)
     
-    # 
+    
     def on_open(self, fileName):
         self.is_rotated = False
         # update the scrollarea size
@@ -369,6 +373,7 @@ class QImageViewer(QMainWindow):
         #
         ppixmap = None
         self.is_animated = False
+        self.is_multipage = False
         if self._movie:
             self._movie.stop()
             self._movie = None
@@ -408,11 +413,23 @@ class QImageViewer(QMainWindow):
         #
         #
         if self._movie.frameCount() > 1:
-            self.is_animated = True
             self.imageLabel.setMovie(self._movie)
             self.original_imageLabel = self.imageLabel
             #
             self._movie.start()
+            self._movie.stop()
+            ###
+            # self.is_animated = True
+            ###
+            # 0 multipage - -1 animated
+            _is_multipage = self._movie.loopCount()
+            if _is_multipage == 0:
+                self.is_multipage = True
+                self._movie.frameChanged.connect(self.on_movie_frame_changed)
+                self._movie.finished.connect(self.on_movie_finished)
+            if self.is_multipage == False:
+                self.is_animated = True
+            ###
             ppixmap = self._movie.currentPixmap()
             if ppixmap.isNull():
                 QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
@@ -427,6 +444,7 @@ class QImageViewer(QMainWindow):
                 ppixmap = QPixmap(fileName)
             if not ppixmap.isNull():
                 self.imageLabel.setPixmap(ppixmap)
+                self.imageLabel.rotation = 0
             else:
                 QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
                 return -1
@@ -454,15 +472,35 @@ class QImageViewer(QMainWindow):
             self.printAct.setEnabled(True)
             self.updateActions()
             self.infoAct.setEnabled(True)
-        # 
-        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
+        #
+        self.loopAct.setEnabled(False)
+        self.loopAct.setChecked(False)
+        if self.is_multipage == True:
+            self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
+            self.prevPageAct.setEnabled(True)
+            self.nextPageAct.setEnabled(True)
+            self.loopAct.setEnabled(True)
+            self.loopAct.setChecked(False)
+        else:
+            self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
+            self.prevPageAct.setEnabled(False)
+            self.nextPageAct.setEnabled(False)
         #
         if self.is_animated:
             self.rotateLeftAct.setEnabled(False)
             self.rotateRightAct.setEnabled(False)
+            self.loopAct.setEnabled(True)
+            self.loopAct.setChecked(True)
         else:
             self.rotateLeftAct.setEnabled(True)
             self.rotateRightAct.setEnabled(True)
+    
+    def on_movie_frame_changed(self, _n):
+        self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), _n+1, self._movie.frameCount()))
+        
+    def on_movie_finished(self):
+        if self.loopAct.isChecked():
+            self.loopAct.setChecked(False)
     
     def print_(self):
         dialog = QPrintDialog(self.printer, self)
@@ -539,6 +577,10 @@ class QImageViewer(QMainWindow):
         self.fitSizeAct = QAction("Fit to window", self, shortcut="Ctrl+f", enabled=False, triggered=self.fitSize)
         self.rotateLeftAct = QAction("Rotate Left", self, shortcut="Ctrl+e", enabled=False, triggered=self.rotateLeft)
         self.rotateRightAct = QAction("Rotate Right", self, shortcut="Ctrl+r", enabled=False, triggered=self.rotateRight)
+        self.loopAct = QAction("Loop", self, shortcut="ctrl+l", enabled=False, triggered=self.on_loop)
+        self.loopAct.setCheckable(True)
+        self.prevPageAct = QAction("Previous Page", self, shortcut="ctrl+a", enabled=False, triggered=lambda:self.on_multipage(-1))
+        self.nextPageAct = QAction("Previous Page", self, shortcut="ctrl+z", enabled=False, triggered=lambda:self.on_multipage(1))
         self.leftPanelAct = QAction("Left Panel", self, shortcut="Ctrl+p", enabled=False, triggered=self.on_leftpanelaction)
         #
         self.tool1Act = QAction("{}".format(TOOL1NAME or "Tool1"), self, shortcut="Ctrl+1", enabled=True, triggered=self.tool1)
@@ -605,6 +647,10 @@ class QImageViewer(QMainWindow):
         self.viewMenu.addAction(self.rotateLeftAct)
         self.viewMenu.addAction(self.rotateRightAct)
         self.viewMenu.addSeparator()
+        self.viewMenu.addAction(self.loopAct)
+        self.viewMenu.addAction(self.prevPageAct)
+        self.viewMenu.addAction(self.nextPageAct)
+        self.viewMenu.addSeparator()
         self.viewMenu.addAction(self.leftPanelAct)
         #
         self.toolMenu = QMenu("&Tool", self)
@@ -617,6 +663,12 @@ class QImageViewer(QMainWindow):
         self.menuBar().addMenu(self.fileMenu)
         self.menuBar().addMenu(self.viewMenu)
         self.menuBar().addMenu(self.toolMenu)
+    
+    def on_loop(self):
+        if self.sender().isChecked() == False:
+            self._movie.stop()
+        else:
+            self._movie.start()
     
     def tool1(self):
         if self.ipath == "" or self.ipath == None:
@@ -655,6 +707,7 @@ class QImageViewer(QMainWindow):
         self.zoomOutAct.setEnabled(True)
         self.normalSizeAct.setEnabled(True)
         self.fitSizeAct.setEnabled(True)
+        self.loopAct.setEnabled(True)
         self.rotateLeftAct.setEnabled(True)
         self.rotateRightAct.setEnabled(True)
         self.leftPanelAct.setEnabled(True)
@@ -769,21 +822,45 @@ class QImageViewer(QMainWindow):
         if self.is_animated:
             return
         #
-        if self.is_rotated or not self.is_animated:
-            ppixmap = self.imageLabel.pixmap()
-        else:
-            ppixmap = self._movie.currentPixmap()
         if ttype == -1:
             image_rotation = 90
         else:
             image_rotation = -90
-        # 
+        #
+        if self.is_multipage == False and (self.is_rotated or not self.is_animated):
+            ppixmap = self.imageLabel.pixmap()
+        elif self.is_multipage:
+            self._movie.stop()
+            ppixmap = self._movie.currentPixmap()
+            if hasattr(self.imageLabel, "rotation"):
+                image_rotation += self.imageLabel.rotation
+                if image_rotation in [360,-360]:
+                    self.imageLabel.rotation = 0
+                    image_rotation = 0
+                else:
+                    self.imageLabel.rotation = image_rotation
+            else:
+                self.imageLabel.rotation = image_rotation
+        #
         transform = QTransform().rotate(image_rotation)
         ppixmap = ppixmap.transformed(transform, Qt.TransformationMode.SmoothTransformation)
         #
         self.imageLabel.setPixmap(ppixmap)
         self.is_rotated = True
         self.imageLabel.resize(self.scaleFactor * ppixmap.size())
+    
+    # -1 previous page - 1 next page
+    def on_multipage(self, ttype):
+        curr_frame_num = self._movie.currentFrameNumber()
+        tot_frame_num = self._movie.frameCount()
+        if curr_frame_num < tot_frame_num-1:
+            curr_frame_num += 1
+        else:
+            curr_frame_num = 0
+        ret = self._movie.jumpToFrame(curr_frame_num)
+        ppixmap = self._movie.currentPixmap()
+        self.imageLabel.setPixmap(ppixmap)
+        self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
     
     def eventFilter(self, source, event):
         # mouse scrolling
@@ -846,6 +923,13 @@ class QImageViewer(QMainWindow):
                 elif self._color_picker_d == True:
                     QApplication.restoreOverrideCursor()
                     self._color_picker_d = False
+            # multipage
+            elif event.key() == Qt.Key.Key_PageUp:
+                if self.is_multipage:
+                    self.on_multipage(-1)
+            elif event.key() == Qt.Key.Key_PageDown:
+                if self.is_multipage:
+                    self.on_multipage(1)
         #
         return super().eventFilter(source, event)
 
