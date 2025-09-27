@@ -580,7 +580,7 @@ class QImageViewer(QMainWindow):
         self.loopAct = QAction("Loop", self, shortcut="ctrl+l", enabled=False, triggered=self.on_loop)
         self.loopAct.setCheckable(True)
         self.prevPageAct = QAction("Previous Page", self, shortcut="ctrl+a", enabled=False, triggered=lambda:self.on_multipage(-1))
-        self.nextPageAct = QAction("Previous Page", self, shortcut="ctrl+z", enabled=False, triggered=lambda:self.on_multipage(1))
+        self.nextPageAct = QAction("Next Page", self, shortcut="ctrl+z", enabled=False, triggered=lambda:self.on_multipage(1))
         self.leftPanelAct = QAction("Left Panel", self, shortcut="Ctrl+p", enabled=False, triggered=self.on_leftpanelaction)
         #
         self.tool1Act = QAction("{}".format(TOOL1NAME or "Tool1"), self, shortcut="Ctrl+1", enabled=True, triggered=self.tool1)
