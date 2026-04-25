@@ -1,10 +1,10 @@
 #!/usr/bin/python3
-# V. 0.9.5
+# V. 1.0.0
 
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
-from PyQt6.QtWidgets import QColorDialog, QListView, QAbstractItemView, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QFileDialog
+from PyQt6.QtWidgets import QPushButton, QMenu, QColorDialog, QListView, QAbstractItemView, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QFileDialog
 import subprocess, os, time
 from cfg_imageviewer import *
 import io
@@ -29,6 +29,10 @@ os.chdir(MY_HOME)
 
 # the image folder
 IMAGE_FOLDER = None
+
+# the overlay1 size
+OV1W = OVERLAY_WIDTH
+OV1H = OVERLAY_HEIGHT
 
 #######
 # binary extensions
@@ -147,6 +151,8 @@ class QImageViewer(QMainWindow):
         self.HH = HH
         self.resize(self.WW, self.HH)
         self.pixel_ratio = self.devicePixelRatio()
+        self.setObjectName("mymainwindow")
+        self.setStyleSheet("QMainWindow#mymainwindow { background-color: "+WINDOW_BACKGROUND+"};")
         #
         self.ipath = ipath
         self.curr_dir = None
@@ -166,19 +172,24 @@ class QImageViewer(QMainWindow):
         self._movie = None
         # multipage but not animated
         self.is_multipage = False
-        #
+        # # meta+wheel: zoom
+        # self.meta_key_pressed = 0
         # the viewer
         self.imageLabel = QLabel()
         self.imageLabel.setBackgroundRole(QPalette.ColorRole.Base)
         self.imageLabel.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.imageLabel.setScaledContents(True)
+        self.imageLabel.setContentsMargins(0,0,0,0)
         # central scrollarea
         self.scrollArea = QScrollArea()
+        self.scrollArea.setContentsMargins(0,0,0,0)
         self.scrollArea.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.scrollArea.setBackgroundRole(QPalette.ColorRole.Dark)
         self.scrollArea.setWidget(self.imageLabel)
         self.imageLabel.setVisible(False)
         self.scrollArea.installEventFilter(self)
+        self.scrollArea.viewport().installEventFilter(self)
+        self.installEventFilter(self)
         self.last_time_move_h = 0
         self.last_time_move_v = 0
         self.hscrollbar = self.scrollArea.horizontalScrollBar()
@@ -188,7 +199,7 @@ class QImageViewer(QMainWindow):
         self.vbar_width = self.vscrollbar.size().height()
         # the widget that contains everything
         self.main_widget = QWidget()
-        self.main_widget.setContentsMargins(2,2,2,2)
+        self.main_widget.setContentsMargins(0,0,0,0)
         self.setCentralWidget(self.main_widget)
         #
         self.main_box = QHBoxLayout()
@@ -229,8 +240,22 @@ class QImageViewer(QMainWindow):
         #
         self.directory_current_idx = None
         #
+        # 0 use overlay - 1 use toolbar
+        self.use_toolbar = USE_TOOLBAR
+        #
         self.createActions()
         self.createMenus()
+        # overlay1
+        if self.use_toolbar == 0:
+            self.overlay1_shown = 0
+            self.overlay1 = OverlayWidgetBottom(self)
+            if OVERLAY_POS == 1:
+                self.overlay1.setGeometry(self.WW-10-int(OV1W/self.pixel_ratio),10,int(OV1W/self.pixel_ratio),int(OV1H/self.pixel_ratio))
+            elif OVERLAY_POS == 0:
+                self.overlay1.setGeometry(10,10,int(OV1W/self.pixel_ratio),int(OV1H/self.pixel_ratio))
+            self.overlay1.show()
+            # hide at start
+            self.overlay1.setVisible(False)
         #
         self.setWindowTitle("Image Viewer")
         self.setWindowIcon(QIcon(os.path.join(main_dir, "icons/QImageViewer.svg")))
@@ -479,7 +504,8 @@ class QImageViewer(QMainWindow):
             self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
             self.prevPageAct.setEnabled(True)
             self.nextPageAct.setEnabled(True)
-            self.loopAct.setEnabled(True)
+            # self.loopAct.setEnabled(True)
+            self.loopAct.setEnabled(False)
             self.loopAct.setChecked(False)
         else:
             self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
@@ -530,8 +556,8 @@ class QImageViewer(QMainWindow):
         dialog.done(1)
         if ret == 1:
             MyDialog("Info", "Printed.", self)
-        else:
-            MyDialog("Error", "Error.", self)
+        # else:
+            # MyDialog("Error", "Error.", self)
     
     def info_(self):
         pw = ""
@@ -625,7 +651,7 @@ class QImageViewer(QMainWindow):
                 MyDialog("Error", "Some errors occoured.", self)
         
     def createMenus(self):
-        self.fileMenu = QMenu("&File", self)
+        self.fileMenu = QMenu("&File")#, self)
         self.fileMenu.addAction(self.openAct)
         self.fileMenu.addAction(self.printAct)
         self.fileMenu.addSeparator()
@@ -638,7 +664,7 @@ class QImageViewer(QMainWindow):
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.exitAct)
 
-        self.viewMenu = QMenu("&View", self)
+        self.viewMenu = QMenu("&View")#, self)
         self.viewMenu.addAction(self.zoomInAct)
         self.viewMenu.addAction(self.zoomOutAct)
         self.viewMenu.addAction(self.normalSizeAct)
@@ -653,22 +679,31 @@ class QImageViewer(QMainWindow):
         self.viewMenu.addSeparator()
         self.viewMenu.addAction(self.leftPanelAct)
         #
-        self.toolMenu = QMenu("&Tool", self)
+        self.toolMenu = QMenu("&Tool")#, self)
         self.toolMenu.addAction(self.tool1Act)
         self.toolMenu.addAction(self.tool2Act)
         self.toolMenu.addAction(self.tool3Act)
         self.toolMenu.addAction(self.tool4Act)
         self.toolMenu.addAction(self.tool5Act)
         #
-        self.menuBar().addMenu(self.fileMenu)
-        self.menuBar().addMenu(self.viewMenu)
-        self.menuBar().addMenu(self.toolMenu)
+        if self.use_toolbar == 1:
+            self.menuBar().addMenu(self.fileMenu)
+            self.menuBar().addMenu(self.viewMenu)
+            self.menuBar().addMenu(self.toolMenu)
     
     def on_loop(self):
-        if self.sender().isChecked() == False:
-            self._movie.stop()
+        if self.sender() != None:
+            if self.sender().isChecked() == False:
+                self._movie.stop()
+            else:
+                self._movie.start()
         else:
-            self._movie.start()
+            if self.loopAct.isChecked() == True:
+                self._movie.stop()
+                self.loopAct.setChecked(False)
+            else:
+                self._movie.start()
+                self.loopAct.setChecked(True)
     
     def tool1(self):
         if self.ipath == "" or self.ipath == None:
@@ -724,16 +759,22 @@ class QImageViewer(QMainWindow):
             #
             self.scaleFactor *= factor
         #
-        if self.is_rotated or not self.is_animated:
-            ppixmap = self.imageLabel.pixmap()
-        else:
+        if self.is_animated or self.is_multipage:
             _frames = self._movie.frameCount()
-            if _frames > 1:
+            if _frames > 1 and self.is_animated:
                 self._movie.stop()
                 self._movie.jumpToFrame(0)
-            ppixmap = self.original_imageLabel.movie().currentPixmap()
-            if _frames > 1:
+                # ppixmap = self.original_imageLabel.movie().currentPixmap()
+                ppixmap = self._movie.currentPixmap()
+            # if _frames > 1 and self.is_animated:
                 self._movie.start()
+            elif _frames > 1 and self.is_multipage:
+                self._movie.stop()
+                ppixmap = self._movie.currentPixmap()
+        # elif self.is_rotated:
+        else:
+            ppixmap = self.imageLabel.pixmap()
+        
         self.imageLabel.resize(self.scaleFactor * ppixmap.size())
         #
         self.adjustScrollBar(self.scrollArea.horizontalScrollBar(), factor)
@@ -745,6 +786,8 @@ class QImageViewer(QMainWindow):
         self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
     
     def adjustScrollBar(self, scrollBar, factor):
+        # if self.meta_key_pressed == 1:
+            # return
         scrollBar.setValue(int(factor * scrollBar.value()
                                + ((factor - 1) * scrollBar.pageStep() / 2)))
     
@@ -863,8 +906,32 @@ class QImageViewer(QMainWindow):
         self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
     
     def eventFilter(self, source, event):
+        if event.type() == QEvent.Type.HoverMove:
+            if self.use_toolbar == 0:
+                _ex = event.position().x()
+                _ey = event.position().y()
+                if OVERLAY_POS == 1:
+                    if (self.WW-10-int(OV1W/self.pixel_ratio)) < _ex < (self.WW-10) and (10) < _ey < (10+int(OV1H/self.pixel_ratio)):
+                        if self.overlay1_shown == 0:
+                            self.overlay1.setVisible(True)
+                            self.overlay1_shown = 1
+                            return True
+                    else:
+                        self.overlay1.setVisible(False)
+                        self.overlay1_shown = 0
+                        return True
+                elif OVERLAY_POS == 0:
+                    if (10) < _ex < (OV1H+10) and (10) < _ey < (10+int(OV1H/self.pixel_ratio)):
+                        if self.overlay1_shown == 0:
+                            self.overlay1.setVisible(True)
+                            self.overlay1_shown = 1
+                            return True
+                    else:
+                        self.overlay1.setVisible(False)
+                        self.overlay1_shown = 0
+                        return True
         # mouse scrolling
-        if event.type() == QEvent.Type.MouseMove:
+        elif event.type() == QEvent.Type.MouseMove:
             if self.last_time_move_v == 0:
                 self.last_time_move_v = int(event.position().y())
             vdistance = self.last_time_move_v - int(event.position().y())
@@ -905,6 +972,51 @@ class QImageViewer(QMainWindow):
                     return True
         # key navigation
         elif event.type() == QEvent.Type.KeyPress:
+            # overlay1
+            if self.use_toolbar == 0:
+                if event.modifiers()  == Qt.KeyboardModifier.ControlModifier:
+                    if event.key() == Qt.Key.Key_O:
+                        self.open()
+                    elif event.key() == Qt.Key.Key_P:
+                        self.print_()
+                    elif event.key() == Qt.Key.Key_I:
+                        self.info_()
+                    elif event.key() == Qt.Key.Key_Q:
+                        self.close()
+                    #
+                    elif event.key() == Qt.Key.Key_Plus:
+                        self.zoomIn()
+                    elif event.key() == Qt.Key.Key_Minus:
+                        self.zoomOut()
+                    elif event.key() == Qt.Key.Key_N:
+                        self.normalSize()
+                    elif event.key() == Qt.Key.Key_F:
+                        self.fitSize()
+                    elif event.key() == Qt.Key.Key_E:
+                        self.rotateLeft()
+                    elif event.key() == Qt.Key.Key_R:
+                        self.rotateRight()
+                    elif event.key() == Qt.Key.Key_L:
+                        self.on_loop()
+                    #
+                    elif event.key() == Qt.Key.Key_A:
+                        self.on_multipage(-1)
+                    elif event.key() == Qt.Key.Key_Z:
+                        self.on_multipage(1)
+                    elif event.key() == Qt.Key.Key_P:
+                        self.on_leftpanelaction()
+                    #
+                    elif event.key() == Qt.Key.Key_1:
+                        self.tool1()
+                    elif event.key() == Qt.Key.Key_2:
+                        self.tool2()
+                    elif event.key() == Qt.Key.Key_3:
+                        self.tool3()
+                    elif event.key() == Qt.Key.Key_4:
+                        self.on_color_picker()
+                    elif event.key() == Qt.Key.Key_5:
+                        self.on_color_picker_d()
+                    return True
             # next or previous file
             if event.key() == Qt.Key.Key_Left:
                 self.keyNav(-1)
@@ -930,8 +1042,81 @@ class QImageViewer(QMainWindow):
             elif event.key() == Qt.Key.Key_PageDown:
                 if self.is_multipage:
                     self.on_multipage(1)
+            # elif event.key() == Qt.Key.Key_Meta:
+                # self.meta_key_pressed = 1
+        # elif event.type() == QEvent.Type.KeyRelease:
+            # if event.key() == Qt.Key.Key_Meta:
+                # self.meta_key_pressed = 0
+        # mouse wheel zoom
+        elif event.type() == QEvent.Type.Wheel:
+            # if self.is_multipage == True:
+               # return True
+            # if self.is_animated:
+                # return True
+            # else:
+            if self.is_multipage == False:
+                ppixmap = self.imageLabel.pixmap()
+            else:
+                self._movie.stop()
+                ppixmap = self._movie.currentPixmap()
+            # if self.meta_key_pressed == 1:
+            if 1:
+                if event.angleDelta().y() < 0:
+                    # zoom out
+                    self.scaleImage(0.8)
+                    _d = (self.scaleFactor-self.scaleFactorStart)
+                    _HH = 0
+                    if _d > 0:
+                        _HH = (ppixmap.width()*self.scaleFactor-ppixmap.width()*self.scaleFactorStart)/(2)
+                    _VV = 0
+                    if _d > 0:
+                        _VV = (ppixmap.height()*self.scaleFactor-ppixmap.height()*self.scaleFactorStart)/(2)
+                    self.hscrollbar.setValue(int(_HH))
+                    self.vscrollbar.setValue(int(_VV))
+                    return True
+                elif event.angleDelta().y() > 0:
+                    # zoom in
+                    self.scaleImage(1.25)
+                    _d = (self.scaleFactor-self.scaleFactorStart)
+                    _HH = 0
+                    if _d > 0:
+                        _HH = (ppixmap.width()*self.scaleFactor-ppixmap.width()*self.scaleFactorStart)/(2)
+                    _VV = 0
+                    if _d > 0:
+                        _VV = (ppixmap.height()*self.scaleFactor-ppixmap.height()*self.scaleFactorStart)/(2)
+                    self.hscrollbar.setValue(int(_HH))
+                    self.vscrollbar.setValue(int(_VV))
+                    return True
         #
         return super().eventFilter(source, event)
+
+class OverlayWidgetBottom(QWidget):
+    def __init__(self, parent):
+        QWidget.__init__(self, parent)
+        self.parent = parent
+        self.setContentsMargins(0, 0, 0, 0)
+        #
+        self.central_layout = QHBoxLayout()
+        self.central_layout.setContentsMargins(0, 0, 0, 0)
+        self.central_layout.setSpacing(0)
+        self.setStyleSheet("background-color: rgba(128,128,128,0.6); border-width: 1px; border-style: solid; border-color: #ffffff;")
+        # self.setWindowOpacity(0.01)
+        #
+        self.setLayout(self.central_layout)
+        #
+        self.menu_btn = QPushButton()
+        self.menu_btn.setFlat(True)
+        _icon = QIcon(os.path.join(main_dir, "icons/menu.svg"))
+        self.menu_btn.setIcon(_icon)
+        self.central_layout.addWidget(self.menu_btn)
+        #
+        self.menu0 = QMenu()
+        self.menu_btn.setMenu(self.menu0)
+        #
+        self.menu0.addMenu(self.parent.fileMenu)
+        self.menu0.addMenu(self.parent.viewMenu)
+        self.menu0.addMenu(self.parent.toolMenu)
+        
 
 # type - message - parent
 class MyDialog(QMessageBox):
@@ -975,5 +1160,6 @@ if __name__ == '__main__':
             imageViewer = QImageViewer(None)
     else:
         imageViewer = QImageViewer(None)
+    QGuiApplication.setDesktopFileName("qt6imageviewer")
     imageViewer.show()
     sys.exit(app.exec())
