@@ -1,6 +1,7 @@
 #!/usr/bin/python3
-# V. 1.0.0
+# V. 1.1.0
 
+from qt6imgvrlang import *
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QAction, QImage, QImageReader, QPixmap, QPalette, QPainter, QIcon, QTransform, QMovie, QBrush, QColor
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
@@ -18,6 +19,26 @@ if with_pil:
 else:
     skip_pil = 1
 
+skip_glycin = 1
+if with_glycin == 1:
+    try:
+        import gi
+        gi.require_version("Gly", "1")
+        gi.require_version("GlyGtk4", "1")
+        from gi.repository import Gly, GlyGtk4, Gio
+        skip_glycin = 0
+    except:
+        skip_glycin = 0
+elif with_glycin == 2:
+    try:
+        import gi
+        gi.require_version("Gly", "2")
+        gi.require_version("GlyGtk4", "2")
+        from gi.repository import Gly, GlyGtk4, Gio
+        skip_glycin = 0
+    except:
+        skip_glycin = 1
+        
 # home dir
 MY_HOME = os.path.expanduser('~')
 
@@ -49,17 +70,29 @@ if with_pil:
 # extensions
 fformats = fformats_tmp[0:-1]
 
-dialog_filters = 'Images ({});;All files (*)'.format(fformats)
-dialog_filters2 = 'Images ({});;All files (*)'.format("*.png *.jpg *.jpeg")
+if with_pil != [] and PIL_EXT != []:
+    fformats += " "
+    fformats += " ".join(PIL_EXT)
+
+if with_glycin > 0 and GLICYN_EXT != []:
+    fformats += " "
+    fformats += " ".join(GLICYN_EXT)
+
+dialog_filters = '{} ({});;{} (*)'.format(WIMAGES, WALLFILES, fformats)
+dialog_filters2 = '{} ({});;{} (*)'.format(WIMAGES, WALLFILES, "*.png *.jpg *.jpeg")
 
 # mimetypes format
 SUPPORTED_MIME = []
 for el in QImageReader.supportedMimeTypes():
-    if not el in img_skipped:
+    if el not in img_skipped:
         SUPPORTED_MIME.append(el.data().decode())
 
 for el in with_pil:
-    if el not in SUPPORTED_MIME:
+    if el not in SUPPORTED_MIME or el not in img_skipped:
+        SUPPORTED_MIME.append(el)
+
+for el in GLICYN_LIST:
+    if el not in SUPPORTED_MIME or el not in img_skipped:
         SUPPORTED_MIME.append(el)
 
 #######
@@ -108,13 +141,33 @@ class lateralThread(QThread):
                             _pix = ImageQt.toqpixmap(image)
                             if _pix.isNull():
                                 continue
-                            if _pix.isNull():
-                                continue
                             _icon = QIcon(_pix)
                             if _icon.isNull():
                                 del _icon
                                 continue
                         except:
+                            continue
+                    #
+                    elif skip_glycin == 0 and image_type in GLICYN_LIST:
+                        # seems prevent freezing
+                        time.sleep(1)
+                        file = Gio.File.new_for_path(fileName)
+                        loader = Gly.Loader.new(file=file)
+                        loader.set_sandbox_selector(Gly.SandboxSelector.NOT_SANDBOXED)
+                        _image = loader.load()
+                        _frame = _image.next_frame()
+                        _texture = GlyGtk4.frame_get_texture(_frame)
+                        gbytes = _texture.save_to_png_bytes()
+                        bytesio = gbytes.get_data()
+                        _qbytearray = QByteArray(bytesio)
+                        _pix = QPixmap()
+                        _pix.loadFromData(_qbytearray, None, Qt.ImageConversionFlag.AutoColor)
+                        _pix = _pix.scaled(ICON_SIZE,ICON_SIZE,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation)
+                        if _pix.isNull():
+                            continue
+                        _icon = QIcon(_pix)
+                        if _icon.isNull():
+                            del _icon
                             continue
                     #
                     else:
@@ -151,8 +204,11 @@ class QImageViewer(QMainWindow):
         self.HH = HH
         self.resize(self.WW, self.HH)
         self.pixel_ratio = self.devicePixelRatio()
-        self.setObjectName("mymainwindow")
-        self.setStyleSheet("QMainWindow#mymainwindow { background-color: "+WINDOW_BACKGROUND+"};")
+        # self.setObjectName("mymainwindow")
+        # self.setStyleSheet("QMainWindow#mymainwindow { background-color: "+WINDOW_BACKGROUND+"};")
+        self.setContentsMargins(0,0,0,0)
+        # wayland or xcb/xorg
+        self._platform = QGuiApplication.platformName()
         #
         self.ipath = ipath
         self.curr_dir = None
@@ -182,6 +238,8 @@ class QImageViewer(QMainWindow):
         self.imageLabel.setContentsMargins(0,0,0,0)
         # central scrollarea
         self.scrollArea = QScrollArea()
+        if WINDOW_BACKGROUND != 0:
+            self.scrollArea.viewport().setStyleSheet("background-color: {};".format(WINDOW_BACKGROUND))
         self.scrollArea.setContentsMargins(0,0,0,0)
         self.scrollArea.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.scrollArea.setBackgroundRole(QPalette.ColorRole.Dark)
@@ -208,6 +266,9 @@ class QImageViewer(QMainWindow):
         #
         #### lateral panel
         self.lat_widget = QListWidget()
+        self.lat_widget.installEventFilter(self)
+        if PANEL_BACKGROUND != 0:
+            self.lat_widget.setStyleSheet("background-color: {};".format(PANEL_BACKGROUND))
         _lat_spacing = 1
         self.lat_widget.setSpacing(_lat_spacing)
         _bpad = _lat_spacing+int(self.lat_widget.verticalScrollBar().height()/self.pixel_ratio)
@@ -257,7 +318,7 @@ class QImageViewer(QMainWindow):
             # hide at start
             self.overlay1.setVisible(False)
         #
-        self.setWindowTitle("Image Viewer")
+        self.setWindowTitle(WIMAGEVIEWER)
         self.setWindowIcon(QIcon(os.path.join(main_dir, "icons/QImageViewer.svg")))
         #
         self.layout().setContentsMargins(0,0,0,0)
@@ -283,6 +344,7 @@ class QImageViewer(QMainWindow):
         if self.ipath:
             if self.curr_dir == os.path.dirname(self.ipath):
                 return
+            # at start or after opening a new folder
             self.on_on_open()
             ret = self.on_open(self.ipath)
             if ret == -1:
@@ -300,7 +362,7 @@ class QImageViewer(QMainWindow):
     # open from the menu entry
     def open(self):
         options = QFileDialog().options()
-        fileName, _ = QFileDialog.getOpenFileName(self, 'Open File', self.curr_dir, dialog_filters, options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self, WOPENFILE, self.curr_dir, dialog_filters, options=options)
         if fileName:
             self.is_key_nav = 0
             self.ipath = fileName
@@ -410,7 +472,7 @@ class QImageViewer(QMainWindow):
                 return -2
             if image_type in img_skipped:
                 if not self.is_key_nav:
-                    QMessageBox.information(self, "Image Viewer", "Cannot load {}.\nSkipped by user.".format(fileName))
+                    QMessageBox.information(self, WIMAGEVIEWER, "{} {}.\n{}".format(WCANNOTLOAD, WSKIPPED, fileName))
                 return -2
             elif (skip_pil == 0) and (image_type in with_pil):
                 image = Image.open(fileName)
@@ -419,8 +481,19 @@ class QImageViewer(QMainWindow):
                 qbytearray = QByteArray(bytesio.getvalue())
                 bytesio.close()
                 qbuffer = QBuffer(qbytearray)
+            elif skip_glycin == 0 and image_type in GLICYN_LIST:
+                file = Gio.File.new_for_path(fileName)
+                loader = Gly.Loader.new(file=file)
+                loader.set_sandbox_selector(Gly.SandboxSelector.NOT_SANDBOXED)
+                _image = loader.load()
+                _frame = _image.next_frame()
+                _texture = GlyGtk4.frame_get_texture(_frame)
+                gbytes = _texture.save_to_png_bytes()
+                bytesio = gbytes.get_data()
+                qbytearray = QByteArray(bytesio)
+                qbuffer = QBuffer(qbytearray)
         except Exception as E:
-            QMessageBox.information(self, "Image Viewer", "Error {}.".format(str(E)))
+            QMessageBox.information(self, WIMAGEVIEWER, "{}\n{}.".format(WERROR, str(E)))
             return -1
         # 
         self.ipath = fileName
@@ -457,7 +530,7 @@ class QImageViewer(QMainWindow):
             ###
             ppixmap = self._movie.currentPixmap()
             if ppixmap.isNull():
-                QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
+                QMessageBox.information(self, WIMAGEVIEWER, "{}\n{}\n{}.".format(WERROR, os.path.basename(self.ipath), WIMAGENOTSUPPORTED))
                 return -1
             self._movie.stop()
         else:
@@ -471,7 +544,7 @@ class QImageViewer(QMainWindow):
                 self.imageLabel.setPixmap(ppixmap)
                 self.imageLabel.rotation = 0
             else:
-                QMessageBox.information(self, "Image Viewer", "Error:\n{}\n{}.".format(os.path.basename(self.ipath), "Image type not supported"))
+                QMessageBox.information(self, WIMAGEVIEWER, "{}\n{}\n{}.".format(WERROR, os.path.basename(self.ipath), WIMAGENOTSUPPORTED))
                 return -1
         #
         image_width = ppixmap.width()
@@ -501,14 +574,14 @@ class QImageViewer(QMainWindow):
         self.loopAct.setEnabled(False)
         self.loopAct.setChecked(False)
         if self.is_multipage == True:
-            self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
+            self.setWindowTitle("{} - {} - x{} - {}/{}".format(WIMAGEVIEWER, os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
             self.prevPageAct.setEnabled(True)
             self.nextPageAct.setEnabled(True)
             # self.loopAct.setEnabled(True)
             self.loopAct.setEnabled(False)
             self.loopAct.setChecked(False)
         else:
-            self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
+            self.setWindowTitle("{} - {} - x{}".format(WIMAGEVIEWER, os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
             self.prevPageAct.setEnabled(False)
             self.nextPageAct.setEnabled(False)
         #
@@ -522,7 +595,7 @@ class QImageViewer(QMainWindow):
             self.rotateRightAct.setEnabled(True)
     
     def on_movie_frame_changed(self, _n):
-        self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), _n+1, self._movie.frameCount()))
+        self.setWindowTitle("{} - {} - x{} - {}/{}".format(WIMAGEVIEWER, os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), _n+1, self._movie.frameCount()))
         
     def on_movie_finished(self):
         if self.loopAct.isChecked():
@@ -555,7 +628,7 @@ class QImageViewer(QMainWindow):
             painter.drawPixmap(0, 0, ppixmap)
         dialog.done(1)
         if ret == 1:
-            MyDialog("Info", "Printed.", self)
+            MyDialog(WIMAGEVIEWER, WIMAGEVIEWER, self)
         # else:
             # MyDialog("Error", "Error.", self)
     
@@ -574,10 +647,10 @@ class QImageViewer(QMainWindow):
         except:
             pw = self._movie.frameRect().width()
             ph = self._movie.frameRect().height()
-            pd = "Unknown"
+            pd = WUNKNOWN
         imime = QMimeDatabase().mimeTypeForFile(self.ipath, QMimeDatabase.MatchMode.MatchDefault)
         imime_name = imime.name()
-        QMessageBox.information(self, "Image Info", "Name: {}\nWidth: {}\nHeight: {}\nDepth: {}\nType: {}".format(os.path.basename(self.ipath), pw, ph, pd, imime_name))
+        QMessageBox.information(self, WIMAGEVIEWER, "{} {}\n{} {}\n{} {}\n{} {}\n{} {}".format(WNAME, WWIDTH, WHEIGHT, WDEPTH, WTYPE, os.path.basename(self.ipath), pw, ph, pd, imime_name))
     
     def zoomIn(self):
         self.scaleImage(1.25)
@@ -592,36 +665,37 @@ class QImageViewer(QMainWindow):
         self.scaleImage("fit")
     
     def createActions(self):
-        self.openAct = QAction("&Open...", self, shortcut="Ctrl+o", triggered=self.open)
-        self.printAct = QAction("&Print...", self, shortcut="Ctrl+p", enabled=False, triggered=self.print_)
-        self.infoAct = QAction("&Info", self, shortcut="Ctrl+i", enabled=False, triggered=self.info_)
-        self.exitAct = QAction("E&xit", self, shortcut="Ctrl+q", triggered=self.close)
+        self.openAct = QAction(WOPEN, self, shortcut="Ctrl+o", triggered=self.open)
+        self.printAct = QAction(WPRINT, self, shortcut="Ctrl+p", enabled=False, triggered=self.print_)
+        self.infoAct = QAction(WINFO, self, shortcut="Ctrl+i", enabled=False, triggered=self.info_)
+        self.exitAct = QAction("Exit", self, shortcut="Ctrl+q", triggered=self.close)
         #
-        self.zoomInAct = QAction("Zoom In (25%)", self, shortcut="Ctrl++", enabled=False, triggered=self.zoomIn)
-        self.zoomOutAct = QAction("Zoom Out (25%)", self, shortcut="Ctrl+-", enabled=False, triggered=self.zoomOut)
-        self.normalSizeAct = QAction("Normal Size", self, shortcut="Ctrl+n", enabled=False, triggered=self.normalSize)
-        self.fitSizeAct = QAction("Fit to window", self, shortcut="Ctrl+f", enabled=False, triggered=self.fitSize)
-        self.rotateLeftAct = QAction("Rotate Left", self, shortcut="Ctrl+e", enabled=False, triggered=self.rotateLeft)
+        self.zoomInAct = QAction(WZOOMIN, self, shortcut="Ctrl++", enabled=False, triggered=self.zoomIn)
+        self.zoomOutAct = QAction(WZOOMOUT, self, shortcut="Ctrl+-", enabled=False, triggered=self.zoomOut)
+        self.normalSizeAct = QAction(WNORMALSIZE, self, shortcut="Ctrl+n", enabled=False, triggered=self.normalSize)
+        self.fitSizeAct = QAction(WFITWINDOW, self, shortcut="Ctrl+f", enabled=False, triggered=self.fitSize)
+        self.rotateLeftAct = QAction(WROTATELEFT, self, shortcut="Ctrl+e", enabled=False, triggered=self.rotateLeft)
         self.rotateRightAct = QAction("Rotate Right", self, shortcut="Ctrl+r", enabled=False, triggered=self.rotateRight)
-        self.loopAct = QAction("Loop", self, shortcut="ctrl+l", enabled=False, triggered=self.on_loop)
+        self.loopAct = QAction(WLOOP, self, shortcut="ctrl+l", enabled=False, triggered=self.on_loop)
         self.loopAct.setCheckable(True)
-        self.prevPageAct = QAction("Previous Page", self, shortcut="ctrl+a", enabled=False, triggered=lambda:self.on_multipage(-1))
-        self.nextPageAct = QAction("Next Page", self, shortcut="ctrl+z", enabled=False, triggered=lambda:self.on_multipage(1))
-        self.leftPanelAct = QAction("Left Panel", self, shortcut="Ctrl+p", enabled=False, triggered=self.on_leftpanelaction)
+        self.prevPageAct = QAction(WPREVPAGE, self, shortcut="ctrl+a", enabled=False, triggered=lambda:self.on_multipage(-1))
+        self.nextPageAct = QAction(WNEXTPAGE, self, shortcut="ctrl+z", enabled=False, triggered=lambda:self.on_multipage(1))
+        self.leftPanelAct = QAction(WLEFTPANEL, self, shortcut="Ctrl+c", enabled=False, triggered=self.on_leftpanelaction)
         #
         self.tool1Act = QAction("{}".format(TOOL1NAME or "Tool1"), self, shortcut="Ctrl+1", enabled=True, triggered=self.tool1)
         self.tool2Act = QAction("{}".format(TOOL2NAME or "Tool2"), self, shortcut="Ctrl+2", enabled=True, triggered=self.tool2)
         self.tool3Act = QAction("{}".format(TOOL3NAME or "Tool3"), self, shortcut="Ctrl+3", enabled=True, triggered=self.tool3)
         #
-        self.tool4Act = QAction("{}".format("Color picker - clipboard"), self, shortcut="Ctrl+4", enabled=True, triggered=self.on_color_picker)
-        self.tool5Act = QAction("{}".format("Color picker - dialog"), self, shortcut="Ctrl+5", enabled=True, triggered=self.on_color_picker_d)
+        self.tool4Act = QAction("{}".format(WCOLPICKERCLIPBOARD), self, shortcut="Ctrl+4", enabled=True, triggered=self.on_color_picker)
+        self.tool5Act = QAction("{}".format(WCOLPICKERDIALOG), self, shortcut="Ctrl+5", enabled=True, triggered=self.on_color_picker_d)
+        self.tool6Act = QAction("{}".format(WTESSERACT), self, shortcut="Ctrl+6", enabled=True, triggered=self.on_tesseract)
         #
-        self.saveAsPNG = QAction("{}".format("Save as PNG"), self)
+        self.saveAsPNG = QAction("{}".format(WSAVEPNG), self)
         # self.saveAsPNG.setShortcut("Ctrl+5")
         self.saveAsPNG.setEnabled(True)
         self.saveAsPNG.triggered.connect(lambda:self.on_save_image("png"))
         #
-        self.saveAsJPG = QAction("{}".format("Save as JPG"), self)
+        self.saveAsJPG = QAction("{}".format(WSAVEJPG), self)
         # self.saveAsJPG.setShortcut("Ctrl+6")
         self.saveAsJPG.setEnabled(True)
         self.saveAsJPG.triggered.connect(lambda:self.on_save_image("jpg"))
@@ -640,22 +714,22 @@ class QImageViewer(QMainWindow):
             else:
                 ppixmap = self._movie.currentPixmap()
         options = QFileDialog().options()
-        fileName, _ = QFileDialog.getSaveFileName(self, 'Save File', MY_HOME, dialog_filters2, options=options)
+        fileName, _ = QFileDialog.getSaveFileName(self, WSAVEFILE, MY_HOME, dialog_filters2, options=options)
         if fileName:
             if not fileName.split(".")[-1] in ["png","jpg","jpeg"]:
                 fileName = fileName+"."+_code
             ret = ppixmap.save(fileName, _code)
             if ret:
-                MyDialog("Info", "Saved.", self)
+                MyDialog(WINFO, WSAVED, self)
             else:
-                MyDialog("Error", "Some errors occoured.", self)
+                MyDialog(WERROR1, WERROR2, self)
         
     def createMenus(self):
-        self.fileMenu = QMenu("&File")#, self)
+        self.fileMenu = QMenu(WFILE)#, self)
         self.fileMenu.addAction(self.openAct)
         self.fileMenu.addAction(self.printAct)
         self.fileMenu.addSeparator()
-        self.subMenuSave = QMenu("&Save as...")
+        self.subMenuSave = QMenu(WSAVEAS)
         self.subMenuSave.addAction(self.saveAsPNG)
         self.subMenuSave.addAction(self.saveAsJPG)
         self.fileMenu.addMenu(self.subMenuSave)
@@ -664,7 +738,7 @@ class QImageViewer(QMainWindow):
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.exitAct)
 
-        self.viewMenu = QMenu("&View")#, self)
+        self.viewMenu = QMenu(WVIEW)#, self)
         self.viewMenu.addAction(self.zoomInAct)
         self.viewMenu.addAction(self.zoomOutAct)
         self.viewMenu.addAction(self.normalSizeAct)
@@ -679,12 +753,13 @@ class QImageViewer(QMainWindow):
         self.viewMenu.addSeparator()
         self.viewMenu.addAction(self.leftPanelAct)
         #
-        self.toolMenu = QMenu("&Tool")#, self)
+        self.toolMenu = QMenu(WTOOL)#, self)
         self.toolMenu.addAction(self.tool1Act)
         self.toolMenu.addAction(self.tool2Act)
         self.toolMenu.addAction(self.tool3Act)
         self.toolMenu.addAction(self.tool4Act)
         self.toolMenu.addAction(self.tool5Act)
+        self.toolMenu.addAction(self.tool6Act)
         #
         if self.use_toolbar == 1:
             self.menuBar().addMenu(self.fileMenu)
@@ -711,7 +786,7 @@ class QImageViewer(QMainWindow):
         try:
             subprocess.Popen([os.path.join(main_dir, "tool1.sh"), self.ipath])
         except Exception as E:
-            MyDialog("Error", str(E), self)
+            MyDialog(WERROR1, str(E), self)
     
     def tool2(self):
         if self.ipath == "" or self.ipath == None:
@@ -719,7 +794,7 @@ class QImageViewer(QMainWindow):
         try:
             subprocess.Popen([os.path.join(main_dir, "tool2.sh"), self.ipath])
         except Exception as E:
-            MyDialog("Error", str(E), self)
+            MyDialog(WERROR1, str(E), self)
     
     def tool3(self):
         if self.ipath == "" or self.ipath == None:
@@ -727,7 +802,7 @@ class QImageViewer(QMainWindow):
         try:
             subprocess.Popen([os.path.join(main_dir, "tool3.sh"), self.ipath])
         except Exception as E:
-            MyDialog("Error", str(E), self)
+            MyDialog(WERROR1, str(E), self)
     
     def on_color_picker(self):
         self._color_picker = True
@@ -736,6 +811,16 @@ class QImageViewer(QMainWindow):
     def on_color_picker_d(self):
         self._color_picker_d = True
         QApplication.setOverrideCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def on_tesseract(self):
+        try:
+            if self._platform == "wayland":
+                prog = os.path.join(main_dir,"tesseract_clipboard_wayland.sh")
+            else:
+                prog = os.path.join(main_dir,"tesseract_clipboard_xorg.sh")
+            subprocess.Popen([prog])
+        except Exception as E:
+            MyDialog(WERROR1, str(E), self)
     
     def updateActions(self):
         self.zoomInAct.setEnabled(True)
@@ -783,7 +868,7 @@ class QImageViewer(QMainWindow):
         self.zoomInAct.setEnabled(self.scaleFactor/self.pixel_ratio < 3.0)
         self.zoomOutAct.setEnabled(self.scaleFactor/self.pixel_ratio > 0.01)
         #
-        self.setWindowTitle("Image Viewer - {} - x{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
+        self.setWindowTitle("{} - {} - x{}".format(WIMAGEVIEWER, os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2)))
     
     def adjustScrollBar(self, scrollBar, factor):
         # if self.meta_key_pressed == 1:
@@ -903,10 +988,10 @@ class QImageViewer(QMainWindow):
         ret = self._movie.jumpToFrame(curr_frame_num)
         ppixmap = self._movie.currentPixmap()
         self.imageLabel.setPixmap(ppixmap)
-        self.setWindowTitle("Image Viewer - {} - x{} - {}/{}".format(os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
+        self.setWindowTitle("{} - {} - x{} - {}/{}".format(WIMAGEVIEWER, os.path.basename(self.ipath), round(self.scaleFactor*self.pixel_ratio, 2), self._movie.currentFrameNumber()+1, self._movie.frameCount()))
     
     def eventFilter(self, source, event):
-        if event.type() == QEvent.Type.HoverMove:
+        if event.type() == QEvent.Type.HoverMove and isinstance(source, QImageViewer):
             if self.use_toolbar == 0:
                 _ex = event.position().x()
                 _ey = event.position().y()
@@ -1003,7 +1088,7 @@ class QImageViewer(QMainWindow):
                         self.on_multipage(-1)
                     elif event.key() == Qt.Key.Key_Z:
                         self.on_multipage(1)
-                    elif event.key() == Qt.Key.Key_P:
+                    elif event.key() == Qt.Key.Key_C:
                         self.on_leftpanelaction()
                     #
                     elif event.key() == Qt.Key.Key_1:
@@ -1016,6 +1101,8 @@ class QImageViewer(QMainWindow):
                         self.on_color_picker()
                     elif event.key() == Qt.Key.Key_5:
                         self.on_color_picker_d()
+                    elif event.key() == Qt.Key.Key_6:
+                        self.on_tesseract()
                     return True
             # next or previous file
             if event.key() == Qt.Key.Key_Left:
@@ -1049,6 +1136,8 @@ class QImageViewer(QMainWindow):
                 # self.meta_key_pressed = 0
         # mouse wheel zoom
         elif event.type() == QEvent.Type.Wheel:
+            if isinstance(source, QListWidget):
+                return True
             # if self.is_multipage == True:
                # return True
             # if self.is_animated:
@@ -1122,13 +1211,13 @@ class OverlayWidgetBottom(QWidget):
 class MyDialog(QMessageBox):
     def __init__(self, *args):
         super(MyDialog, self).__init__(args[-1])
-        if args[0] == "Info":
+        if args[0] == WINFO:
             self.setIcon(QMessageBox.Icon.Information)
             self.setStandardButtons(QMessageBox.StandardButton.Ok)
-        elif args[0] == "Error":
+        elif args[0] == WERROR1:
             self.setIcon(QMessageBox.Icon.Critical)
             self.setStandardButtons(QMessageBox.StandardButton.Ok)
-        elif args[0] == "Question":
+        elif args[0] == WQUESTION:
             self.setIcon(QMessageBox.Icon.Question)
             self.setStandardButtons(QMessageBox.StandardButton.Ok|QMessageBox.StandardButton.Cancel)
         self.setWindowIcon(QIcon(os.path.join(main_dir,"icons/dialog.png")))
@@ -1141,7 +1230,6 @@ class MyDialog(QMessageBox):
 if __name__ == '__main__':
     import sys, os
     from PyQt6.QtWidgets import QApplication
-    #
     app = QApplication(sys.argv)
     # 
     if len(sys.argv) > 1:
