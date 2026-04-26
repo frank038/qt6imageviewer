@@ -5,6 +5,8 @@ Requirements:
 - python3
 - pyqt6
 - PIL for supporting more image formats (optional but recommended)
+- Glycin version 1 or 2 for supporting more image formats (heic/heicf, avif); optional; to be setted in the config file
+- tesseract for the ocr text recognition (optional): under wayland slurm and grim are alse required; under xorg scrot and xclip are alse required
 - config file cfg_imageviewer.py for some application options
 
 Features:
@@ -21,6 +23,7 @@ Features:
 - fit to window
 - original size
 - multipage image navigation (page up and down)
+- ocr recognition by selection
 - shortcuts.
 
 About the custom actions: from the toolbar can be launched three custom actions. Their names can be changed tin the config file. The bash scripts executed by those actions are: tool1.sh, tool2.sh and tool3.sh. The current visualized image full path will be passed to those bash scripts as argument.
