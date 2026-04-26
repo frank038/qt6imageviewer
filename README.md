@@ -5,7 +5,7 @@ Requirements:
 - python3
 - pyqt6
 - PIL for supporting more image formats (optional but recommended)
-- Glycin version 1 or 2 for supporting more image formats (heic/heicf, avif); optional; to be setted in the config file
+- Glycin version 1 or 2 for supporting more image formats (heic/heif, avif); optional; to be setted in the config file
 - tesseract for the ocr text recognition (optional): under wayland slurm and grim are alse required; under xorg scrot and xclip are alse required
 - config file cfg_imageviewer.py for some application options
 
