@@ -24,7 +24,8 @@ Features:
 - original size
 - multipage image navigation (page up and down)
 - ocr recognition by selection
-- shortcuts.
+- shortcuts
+- language file.
 
 About the custom actions: from the toolbar can be launched three custom actions. Their names can be changed tin the config file. The bash scripts executed by those actions are: tool1.sh, tool2.sh and tool3.sh. The current visualized image full path will be passed to those bash scripts as argument.
 
