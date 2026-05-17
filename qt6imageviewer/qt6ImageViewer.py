@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# V. 1.1.0
+# V. 1.1.1
 
 from qt6imgvrlang import *
 from PyQt6.QtCore import Qt, QRect, QMimeDatabase, QIODevice, QByteArray, QBuffer, QEvent, QSize, QThread, pyqtSignal
@@ -14,6 +14,8 @@ skip_pil = 0
 if with_pil:
     try:
         from PIL import Image, ImageQt
+        if USE_AUTOROTATE:
+            from PIL.ExifTags import TAGS
     except:
         skip_pil = 1
 else:
@@ -78,8 +80,8 @@ if with_glycin > 0 and GLICYN_EXT != []:
     fformats += " "
     fformats += " ".join(GLICYN_EXT)
 
-dialog_filters = '{} ({});;{} (*)'.format(WIMAGES, WALLFILES, fformats)
-dialog_filters2 = '{} ({});;{} (*)'.format(WIMAGES, WALLFILES, "*.png *.jpg *.jpeg")
+dialog_filters = '{};;{} ({})'.format(fformats, WALLFILES, "*")
+dialog_filters2 = '{};;{} ({})'.format("*.png *.jpg *.jpeg", WALLFILES, "*")
 
 # mimetypes format
 SUPPORTED_MIME = []
@@ -129,6 +131,7 @@ class lateralThread(QThread):
         self.list_widget.setIconSize(QSize(ICON_SIZE,ICON_SIZE))
         while data_run:
             for el in _list:
+                image_rotation = 1
                 fileName = os.path.join(self._data, el)
                 image_type = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase.MatchMode.MatchDefault).name()
                 if image_type in SUPPORTED_MIME:
@@ -137,8 +140,35 @@ class lateralThread(QThread):
                     if (skip_pil == 0) and (image_type in with_pil):
                         try:
                             image = Image.open(fileName)
+                            #
+                            if USE_AUTOROTATE == 2:
+                                info = image._getexif()
+                                for tag, value in info.items():
+                                    decoded_data = TAGS.get(tag, tag)
+                                    if decoded_data == "Orientation":
+                                        image_rotation = value
+                                        break
+                            #
                             image = image.resize((ICON_SIZE,ICON_SIZE))
                             _pix = ImageQt.toqpixmap(image)
+                            #
+                            if image_rotation == 2:
+                                _pix = _pix.transformed(QTransform().scale(-1, 1))
+                            elif image_rotation == 3:
+                                _pix = _pix.transformed(QTransform().rotate(180))
+                            elif image_rotation == 4:
+                                _pix = _pix.transformed(QTransform().scale(1, -1))
+                            elif image_rotation == 5:
+                                _pix = _pix.transformed(QTransform().rotate(270))
+                                _pix = _pix.transformed(QTransform().scale(-1, 1))
+                            elif image_rotation == 6:
+                                _pix = _pix.transformed(QTransform().rotate(90))
+                            elif image_rotation == 7:
+                                _pix = _pix.transformed(QTransform().rotate(90))
+                                _pix = _pix.transformed(QTransform().scale(-1, 1))
+                            elif image_rotation == 8:
+                                _pix = _pix.transformed(QTransform().rotate(270))
+                            #
                             if _pix.isNull():
                                 continue
                             _icon = QIcon(_pix)
@@ -155,6 +185,8 @@ class lateralThread(QThread):
                         loader = Gly.Loader.new(file=file)
                         loader.set_sandbox_selector(Gly.SandboxSelector.NOT_SANDBOXED)
                         _image = loader.load()
+                        # if with_glycin == 2 and USE_AUTOROTATE == 2:
+                            # loader.set_apply_transformations(True)
                         _frame = _image.next_frame()
                         _texture = GlyGtk4.frame_get_texture(_frame)
                         gbytes = _texture.save_to_png_bytes()
@@ -173,7 +205,13 @@ class lateralThread(QThread):
                     else:
                         try:
                         # if (skip_pil == 0) and (image_type not in with_pil):
-                            _pix = QPixmap(fileName)#.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            if USE_AUTOROTATE == 0 or USE_AUTOROTATE == 1:
+                                _pix = QPixmap(fileName)#.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio)
+                            elif USE_AUTOROTATE == 2:
+                                _img_r = QImageReader(fileName)
+                                _img_r.setAutoTransform(True)
+                                _pix = QPixmap()
+                                _pix = _pix.fromImageReader(_img_r)
                             if _pix.isNull():
                                 continue
                             _pix = _pix.scaled(QSize(ICON_SIZE,ICON_SIZE), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
@@ -466,6 +504,7 @@ class QImageViewer(QMainWindow):
             self._movie = None
         #
         qbuffer = None
+        image_rotation = 1
         try:
             image_type = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase.MatchMode.MatchDefault).name()
             if image_type not in SUPPORTED_MIME:
@@ -476,6 +515,14 @@ class QImageViewer(QMainWindow):
                 return -2
             elif (skip_pil == 0) and (image_type in with_pil):
                 image = Image.open(fileName)
+                if USE_AUTOROTATE:
+                    info = image._getexif()
+                    for tag, value in info.items():
+                        decoded_data = TAGS.get(tag, tag)
+                        if decoded_data == "Orientation":
+                            image_rotation = value
+                            break
+                #
                 bytesio = io.BytesIO()
                 image.save(fp=bytesio, format="PNG")#, save_all=True)#, append_images=imgs, save_all=True, duration=GIF_DELAY, loop=0)
                 qbytearray = QByteArray(bytesio.getvalue())
@@ -486,6 +533,8 @@ class QImageViewer(QMainWindow):
                 loader = Gly.Loader.new(file=file)
                 loader.set_sandbox_selector(Gly.SandboxSelector.NOT_SANDBOXED)
                 _image = loader.load()
+                # if with_glycin == 2 and USE_AUTOROTATE == 1:
+                #    loader.set_apply_transformations(True)
                 _frame = _image.next_frame()
                 _texture = GlyGtk4.frame_get_texture(_frame)
                 gbytes = _texture.save_to_png_bytes()
@@ -535,12 +584,51 @@ class QImageViewer(QMainWindow):
             self._movie.stop()
         else:
             if qbuffer:
-                self._movie.start()
-                ppixmap = self._movie.currentPixmap()
-                self._movie.stop()
+                if USE_AUTOROTATE == 0:
+                    self._movie.start()
+                    ppixmap = self._movie.currentPixmap()
+                    self._movie.stop()
+                else:
+                    _img_r = QImageReader(qbuffer)
+                    _img_r.setAutoTransform(True)
+                    ppixmap = QPixmap()
+                    ppixmap = ppixmap.fromImageReader(_img_r)
             else:
-                ppixmap = QPixmap(fileName)
+                if USE_AUTOROTATE == 0:
+	                ppixmap = QPixmap(fileName)
+                else:
+                    _img_r = QImageReader(fileName)
+                    _img_r.setAutoTransform(True)
+                    ppixmap = QPixmap()
+                    ppixmap = ppixmap.fromImageReader(_img_r)
             if not ppixmap.isNull():
+                #
+                #1 = Horizontal (normal)
+                #2 = Mirror horizontal
+                #3 = Rotate 180
+                #4 = Mirror vertical
+                #5 = Mirror horizontal and rotate 270 CW
+                #6 = Rotate 90 CW
+                #7 = Mirror horizontal and rotate 90 CW
+                #8 = Rotate 270 CW
+                #
+                if image_rotation == 2:
+                    ppixmap = ppixmap.transformed(QTransform().scale(-1, 1))
+                elif image_rotation == 3:
+                    ppixmap = ppixmap.transformed(QTransform().rotate(180))
+                elif image_rotation == 4:
+                    ppixmap = ppixmap.transformed(QTransform().scale(1, -1))
+                elif image_rotation == 5:
+                    ppixmap = ppixmap.transformed(QTransform().rotate(270))
+                    ppixmap = ppixmap.transformed(QTransform().scale(-1, 1))
+                elif image_rotation == 6:
+                    ppixmap = ppixmap.transformed(QTransform().rotate(90))
+                elif image_rotation == 7:
+                    ppixmap = ppixmap.transformed(QTransform().rotate(90))
+                    ppixmap = ppixmap.transformed(QTransform().scale(-1, 1))
+                elif image_rotation == 8:
+                    ppixmap = ppixmap.transformed(QTransform().rotate(270))
+                #
                 self.imageLabel.setPixmap(ppixmap)
                 self.imageLabel.rotation = 0
             else:

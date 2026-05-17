@@ -24,6 +24,8 @@ GLICYN_EXT = ["*.avif", "*.heif", "*.heic", "*.jxl"]
 # animated_format = ["image/gif", "image/webp"]
 # image formats to be skipped
 img_skipped = []
+# autorotate the images: 0 no - 1 yes - 2 also in the lateral panel 
+USE_AUTOROTATE = 0
 # left panel at start: 0 off - 1 on
 LEFT_PANEL = 0
 # the size of the icons in the left
