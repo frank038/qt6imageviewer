@@ -24,6 +24,7 @@ Features:
 - original size
 - multipage image navigation (page up and down)
 - ocr recognition by selection
+- autorotation of images, when possible (as option in the config file)
 - shortcuts
 - language file.
 
